@@ -1085,7 +1085,7 @@ export function calculateOutOfPlaneDesign(input = {}) {
     /* =======================================================================
     Part/component seismic action. AS/NZS 1170.5:2004 Clause 8.3.2 平面外地震力计算
     ======================================================================= */
-    const partDuctility = positive(input.partDuctilityFactorMu, 1);
+    const partDuctility = positive(input.partDuctilityFactorMu, positive(input.partDuctility, 1));
     const partCh0 = positive(input.partSpectralShapeFactorT0, 1.33);
     const partC0 = partCh0 * positive(input.hazardFactor, 1) * positive(input.returnPeriodFactor, 1) * positive(input.nearFaultFactor, 1);
     const partRp = positive(input.partRiskFactor, 1);
@@ -1119,8 +1119,13 @@ export function calculateOutOfPlaneDesign(input = {}) {
     const Ec_Pa = Ec * 1e6;                            /* Pa */
     const Ig_m4 = Math.pow(tw, 3) / 12;                /* m⁴ (per metre width) */
     const partStiffnessFactor = positive(input.partPeriodStiffnessFactor, 1);
-    const partPeriod = C_coeff * Math.pow(hroof, 2)
+    const partPeriodEstimate = C_coeff * Math.pow(hroof, 2)
         * Math.sqrt(rho * A_strip / (Ec_Pa * Ig_m4 * partStiffnessFactor));
+    // The UI exposes Tp as an explicit design input. Honour it when supplied;
+    // retain the simplified stiffness-based estimate for transparency/fallback.
+    const partPeriodInput = positive(input.partPeriod);
+    const partPeriod = partPeriodInput > 0 ? partPeriodInput : partPeriodEstimate;
+    const partPeriodSource = partPeriodInput > 0 ? 'user input' : 'simplified stiffness estimate';
 
     /* 部件谱形系数（AS/NZS 1170.5 Eq 8.4(1)~(3)，拐点 0.75 s） */
     const partCiTp = (() => {
@@ -1132,10 +1137,13 @@ export function calculateOutOfPlaneDesign(input = {}) {
     const partCpTp = partC0 * CHi * partCiTp;
 
     const partCph = (() => {
-        if (partDuctility === 1) return 1.0;
-        if (partDuctility === 1.25) return 0.85;
-        if (partDuctility === 2.0) return 0.55;
-        if (partDuctility >= 3.0) return 0.45;
+        // NZS 1170.5:2004 Table 8.2 gives discrete values. For an intermediate
+        // input, use the value for the next lower tabulated ductility so that
+        // the response factor is not reduced more than the table supports.
+        if (partDuctility <= 1.0) return 1.0;
+        if (partDuctility < 1.25) return 1.0;
+        if (partDuctility < 2.0) return 0.85;
+        if (partDuctility < 3.0) return 0.55;
         return 0.45;
     })();
 
@@ -1561,6 +1569,9 @@ export function calculateOutOfPlaneDesign(input = {}) {
             CHi,
             partCiTp,
             partPeriod,
+            partPeriodInput,
+            partPeriodEstimate,
+            partPeriodSource,
             partCph,
             partC0,
             partCpTp,
@@ -1696,8 +1707,15 @@ export function calculateConnectionDesign(
         Number.isFinite(bondRatio) && bondRatio <= 1;
     const tensionPass = Number.isFinite(tensionRatio) && tensionRatio <= 1;
     const bearingPass = Number.isFinite(bearingRatio) && bearingRatio <= 1;
-    const overallPass = shearPass && tensionPass && bearingPass && developmentOK;
+    const connectionType = String(input.baseConnectionType || 'Dowel / Grouted Connection');
+    const connectionTypeSupported = connectionType === 'Dowel / Grouted Connection';
+    const overallPass = connectionTypeSupported && shearPass && tensionPass && bearingPass && developmentOK;
     return {
+        connectionType,
+        connectionTypeSupported,
+        warnings: connectionTypeSupported ? [] : [
+            'The current connection calculation only models a dowel / grouted connection. Welded and bolted connections are not verified.'
+        ],
         demand: {
             VinPlane,
             VoutPerM,
@@ -1750,6 +1768,7 @@ export function calculateConnectionDesign(
             bearingRatio
         },
         checks: {
+            connectionTypePass: connectionTypeSupported,
             shearPass,
             tensionPass,
             bearingPass,
@@ -1831,6 +1850,7 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
         ['wallWidth', 'Wall width'],
         ['wallHeight', 'Wall height'],
         ['wallThickness', 'Wall thickness'],
+        ['partPeriod', 'Out-of-plane part period'],
         ['fc', "Concrete strength f'c"],
         ['fy', 'Reinforcement yield strength fy'],
         ['VbarDia', 'Vertical reinforcement diameter'],
@@ -1871,6 +1891,13 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
         (!Number.isFinite(barLayers) || barLayers < 2)
     ) {
         errors.push('Wall thickness exceeds 200 mm but fewer than two reinforcement layers are specified.');
+    }
+
+    const partDuctility = number('partDuctility');
+    if (!Number.isFinite(partDuctility) || partDuctility < 1.0) {
+        errors.push('Out-of-plane part ductility must be at least 1.0.');
+    } else if (![1.0, 1.25, 2.0, 3.0].some(value => Math.abs(value - partDuctility) < 1e-9) && partDuctility < 3.0) {
+        warnings.push('Part ductility is not a tabulated NZS 1170.5:2004 Table 8.2 value; a conservative lower-ductility response factor is used. Verify the selected ductility/detailing basis.');
     }
 
     const N = Number(inPlane.sectionActions?.NseismicCompression);
