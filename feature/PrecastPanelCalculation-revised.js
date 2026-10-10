@@ -2787,7 +2787,7 @@ export function calculatePrecastPanelDesign(rawInput = {}) {
         summary,
         meta: {
             engine: 'PrecastPanelCalculation',
-            version: '0.8.0-nzs3101-branz-alignment',
+            version: '0.9.0-nzs3101-crack-control-screening',
             status: 'Unified In-Plane + Out-of-Plane + Connection + Foundation framework',
             note: 'Rev 0.8: fixed OOP crash (twall) and mm/m unit errors; Sp ≥ 0.7; P-delta per NZS 3101 Cl 11.3.5.1.2 (0.75 factor, Ase=N*+Asfy/fy, 0.05t ecc, applicability limits); Ec per Cl 5.2.3; in-plane shear per Cl 11.3.10 (Eq 11-12~11-19, vmax=0.2fc≤8MPa); OOP shear per Cl 12.7; stability checks (H/t, kH/t, Euler, Vlasov) per BRANZ guide §8.4; phi per Table 2.3.2.2 (fire=1.0, singly-reinforced in-plane=0.7); foundation Z=B·L²/6; connection shear friction per Cl 7.7 + development length per Cl 8.6.3/8.7.2.5.'
         }
