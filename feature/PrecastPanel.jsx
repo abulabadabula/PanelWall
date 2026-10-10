@@ -1789,7 +1789,7 @@ function ResultsTab({ inputs, results }) {
       </Accordion>
 
       <Alert severity="warning" sx={{ mt: 2, mb: 2 }}>
-        The UI displays results from the calculation engine (v0.8). Final design must be verified against applicable NZ Standards and project-specific requirements.
+        The UI displays results from the calculation engine (v0.9). Crack-width results require confirmed SLS actions and independent engineering review against the adopted NZ Standards.
       </Alert>
     </Box>
   );
@@ -1933,7 +1933,7 @@ export default function PrecastPanel() {
                 Precast Concrete Slender Panel
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Unified In-Plane + Out-of-Plane + Connection + Foundation Design (v0.8)
+                Unified In-Plane + Out-of-Plane + SLS Crack Control + Connection + Foundation Design (v0.9)
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
