@@ -2613,7 +2613,14 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
 /* ============================================================================ 
 DESIGN SUMMARY
 =========================================================================== */
-export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation = {}) {
+export function buildDesignSummary(
+    inPlane,
+    outOfPlane,
+    connection,
+    foundation,
+    validation = {},
+    crackControl = null
+) {
     const ipChecks = inPlane?.checks || {};
     const inPlaneChecks = [
         ipChecks.stressCompressionPass,
@@ -2629,9 +2636,9 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         ipChecks.verticalRatioOK !== false
     ].every(Boolean);
     const oopChecks = outOfPlane?.overallOK === true;
-    // A missing result is not equivalent to a successful check.
     const connectionChecks = connection?.checks?.overallPass === true;
     const foundationChecks = foundation?.checks?.overallPass === true;
+    const crackControlPass = crackControl?.checks?.overallPass === true;
     const slendernessWarning = Boolean(ipChecks.slendernessWarning);
     const hroofWarning = outOfPlane?.hroofValidation?.hroofValid === false;
     const pDeltaWarning = outOfPlane?.pDeltaStable === false;
@@ -2639,11 +2646,13 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
     const slenderMethodWarning = outOfPlane?.pDelta?.slenderMethodApplicable === false;
     const validationErrors = Array.isArray(validation.errors) ? validation.errors : [];
     const validationWarnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+    const crackWarnings = Array.isArray(crackControl?.warnings) ? crackControl.warnings : [];
 
-    // Critical items below remain incomplete. The application may report individual
-    // screening checks, but must not advertise an overall code-compliant design.
+    // The flexural crack-width calculation is now implemented, but it remains a
+    // screening method until the SLS action envelope, fs,c, project limit and wall
+    // axial-load applicability have been independently confirmed.
     const reviewItems = [
-        'SLS crack-width verification is not implemented.',
+        'Flexural crack width is modelled as a screening check only; confirm the governing SLS action combinations, crack-width acceptance limit, shrinkage stress f_s,c, and wall-specific rational analysis.',
         'In-plane drift/deflection and explicit SLS out-of-plane deflection limits are not verified; the reported P-Delta displacement is not an SLS serviceability check.',
         'The full AS/NZS 1170.0 ULS/SLS load-combination envelope and reverse-action cases are not generated; verify wind, earthquake, gravity and diaphragm actions separately.',
         'Foundation verification is limited to simplified bearing/sliding/uplift screening; footing flexure, one-way/punching shear, reinforcement development, geotechnical settlement and complete bearing pressure cases are not checked.',
@@ -2655,17 +2664,20 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         oopChecks &&
         connectionChecks &&
         foundationChecks &&
+        crackControlPass &&
         validationErrors.length === 0 &&
         !hroofWarning &&
         !pDeltaWarning &&
         !stabilityWarning;
 
-    // Deliberately false until each critical review item is implemented and validated.
+    // Deliberately false until all critical checks, including SLS and foundation
+    // verification, are completed and benchmarked.
     const designComplete = false;
     const overallPass = implementedChecksPass && designComplete;
     const warnings = [
         ...validationErrors,
         ...validationWarnings,
+        ...crackWarnings,
         slendernessWarning ?
             'Wall h/t exceeds 25. The BRANZ slender-panel applicability and stability checks must be verified.' : null,
         hroofWarning ?
@@ -2675,11 +2687,12 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         stabilityWarning ?
             'Panel stability checks (H/t, kH/t, Euler and Vlasov) are not all satisfied.' : null,
         slenderMethodWarning ?
-            'NZS 3101 Cl 11.3.5.1.2 simplified P-Delta method is outside its stated scope; use a rational analysis.' : null,
+            'NZS 3101 Cl. 11.3.5.1.2 simplified P-Delta method is outside its stated scope; use a rational analysis.' : null,
         !inPlaneChecks ? 'One or more implemented in-plane checks failed or are invalid.' : null,
         !oopChecks ? 'One or more implemented out-of-plane checks failed or are invalid.' : null,
         !connectionChecks ? 'Connection checks failed or are unavailable; do not treat the connection as verified.' : null,
         !foundationChecks ? 'Foundation checks failed or are unavailable; do not treat the foundation as verified.' : null,
+        !crackControlPass ? 'SLS crack-control results are provisional or failed; confirm the SLS moments and crack-width acceptance basis.' : null,
         ...reviewItems
     ].filter(Boolean);
 
@@ -2688,6 +2701,7 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         outOfPlanePass: oopChecks,
         connectionPass: connectionChecks,
         foundationPass: foundationChecks,
+        crackControlPass,
         implementedChecksPass,
         designComplete,
         reviewRequired: true,
@@ -2704,21 +2718,25 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
     };
 }
 
-/* ============================================================================
-MAIN PUBLIC API
-=========================================================================== */
+/* ============================================================================ 
 export function calculatePrecastPanelDesign(rawInput = {}) {
     const input = { ...rawInput };
+    const materials = {
+        concrete: calculateConcreteMaterialProperties(input)
+    };
     const inPlane = calculateInPlaneDesign(input);
     const outOfPlane = calculateOutOfPlaneDesign(input);
+    const crackControl = calculateCrackControl(input, inPlane, outOfPlane, materials);
     const connection = calculateConnectionDesign(input, inPlane, outOfPlane);
     const foundation = calculateFoundationDesign(input, inPlane);
     const validation = validateDesignInputs(input, inPlane);
-    const summary = buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation);
+    const summary = buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation, crackControl);
     return {
         input,
+        materials,
         inPlane,
         outOfPlane,
+        crackControl,
         connection,
         foundation,
         validation,
