@@ -1352,6 +1352,10 @@ function CrackControlBlock({ inputs, materials, crackControl }) {
     return (
       <CalculationSubsection title={directionLabel}>
         <CalculationFormula
+          caption="Gross section properties / 毛截面特性"
+          formula={"A_g=bh=" + fmt(result.Ag, 0) + "\\,\\mathrm{mm^2},\\quad I_g=\\frac{bh^3}{12}=" + fmt(result.Ig, 0) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{mm^4/m}" : "\\,\\mathrm{mm^4}") + ",\\quad y_t=\\frac{h}{2}=" + tx(result.yt, 1) + "\\,\\mathrm{mm},\\quad Z_g=\\frac{I_g}{y_t}=" + fmt(result.Zg, 0) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{mm^3/m}" : "\\,\\mathrm{mm^3}")}
+        />
+        <CalculationFormula
           caption="Gross-section cracking moment / 毛截面开裂弯矩（NZS 3101 Cl. 6.8.3 Eq. 6-2a）"
           formula={"M_{cr,0}=\\frac{f_r I_g}{y_t}=" + tx(result.Mcr0, 2) + momentUnit}
         />
