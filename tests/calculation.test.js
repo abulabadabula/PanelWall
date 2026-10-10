@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   buildDesignSummary,
   calculateInPlaneSectionChecks,
+  calculateOutOfPlaneDesign,
   calculatePrecastPanelDesign,
 } from "../feature/PrecastPanelCalculation-revised.js";
 import { DEFAULT_INPUTS } from "../feature/PrecastPanelConfig.js";
@@ -61,6 +62,31 @@ test("N-M section solver fails closed when axial equilibrium has no root", () =>
   assert.equal(result.sectionCheckPass, false);
   assert.equal(result.momentRatio, Infinity);
   assert.equal(result.interactionRatio, Infinity);
+});
+
+test("OOP seismic action uses the entered part period and ductility", () => {
+  const result = calculateOutOfPlaneDesign({
+    ...DEFAULT_INPUTS,
+    partPeriod: 1.0,
+    partDuctility: 1.25,
+  });
+
+  assert.equal(result.partSeismic.partPeriod, 1.0);
+  assert.equal(result.partSeismic.partPeriodSource, "user input");
+  assert.equal(result.partSeismic.partCph, 0.85);
+  assert.ok(Number.isFinite(result.partSeismic.Fp_panel));
+});
+
+test("unsupported welded connection type is not accepted by dowel checks", () => {
+  const result = calculatePrecastPanelDesign({
+    ...DEFAULT_INPUTS,
+    baseConnectionType: "Welded Connection",
+  });
+
+  assert.equal(result.connection.connectionTypeSupported, false);
+  assert.equal(result.connection.checks.overallPass, false);
+  assert.equal(result.summary.connectionPass, false);
+  assert.ok(result.connection.warnings.length > 0);
 });
 
 test("missing connection and foundation results are not counted as PASS", () => {
