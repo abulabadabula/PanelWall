@@ -1411,7 +1411,7 @@ function CrackControlBlock({ inputs, materials, crackControl }) {
             {result.normalizedAxialLoadRatio > 0.015
               ? ' Normalized axial load exceeds 0.015; independently verify BRANZ low-axial-load scope and the cracked-section model.'
               : ''}
-            ' Effective inertia I_e from Cl. 6.8.3 is based on a beam/slab empirical model for members without significant axial load; its use for a wall panel is screening only and must be independently justified.'
+            {' Effective inertia I_e from Cl. 6.8.3 is based on a beam/slab empirical model for members without significant axial load; its use for a wall panel is screening only and must be independently justified.'}
           </Typography>
         </Alert>
       </CalculationSubsection>
