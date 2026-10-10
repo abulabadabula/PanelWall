@@ -1370,8 +1370,13 @@ function CrackControlBlock({ inputs, materials, crackControl }) {
           status={mkStatus(result.valid && Number.isFinite(result.Icr), 'CALCULATED', 'NOT VERIFIED')}
         />
         <CalculationFormula
+          caption="Effective inertia ratio / 有效惯性矩系数（轴力修正筛查）"
+          formula={"r=\\operatorname{clamp}\\left(\\frac{\\max(M_{cr,N},0)}{M_a},0,1\\right)=" + tx(result.inertiaRatio, 3)}
+          status={mkStatus(result.valid && Number.isFinite(result.inertiaRatio), 'CALCULATED', 'NOT VERIFIED')}
+        />
+        <CalculationFormula
           caption="Effective inertia / 有效惯性矩（NZS 3101 Cl. 6.8.3 Eq. 6-2; axial-load adaptation is a screening estimate）"
-          formula={"I_e=\\left(\\frac{M_{cr,N}}{M_a}\\right)^3 I_g+\\left[1-\\left(\\frac{M_{cr,N}}{M_a}\\right)^3\\right]I_{cr}\\le I_g=" + fmt(result.Ie, 0) + "\\,\\mathrm{mm^4}"}
+          formula={"I_e=r^3I_g+(1-r^3)I_{cr}\\le I_g=" + fmt(result.Ie, 0) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{mm^4/m}" : "\\,\\mathrm{mm^4}")}
           status={mkStatus(result.valid && Number.isFinite(result.Ie), 'CALCULATED', 'NOT VERIFIED')}
         />
         <CalculationFormula
