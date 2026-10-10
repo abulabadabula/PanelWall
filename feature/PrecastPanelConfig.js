@@ -38,7 +38,7 @@ export const CODE_BASIS = {
     general: 'AS/NZS 1170.0',
     permanent: 'AS/NZS 1170.1',
     wind: 'AS/NZS 1170.2:2021',
-    earthquake: 'NZS 1170.5'
+    earthquake: 'NZS 1170.5:2004'
   },
   concrete: {
     standard: 'NZS 3101.1:2006',
