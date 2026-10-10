@@ -1144,7 +1144,7 @@ export function calculateOutOfPlaneDesign(input = {}) {
     })();
 
     const Wp_panel = gammaConcrete * tw;
-    /* §8.3.2 上限 3.6Wp（请与正文核对），下限也请核对 */
+    /* NZS 1170.5:2004 Eq. 8.5(1): cap the horizontal part action at 3.6 Wp. */
     const Fp_panel = Math.min(partCpTp * partCph * partRp, 3.6) * Wp_panel;
 
 
