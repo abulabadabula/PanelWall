@@ -515,6 +515,7 @@ export function getPrecastPanelFormulaSections(inputs, results) {
         {
           sub: 'In-plane flexural crack control / 平面内弯曲裂缝',
           formulas: [
+            { caption: 'Gross section properties / 毛截面特性', tex: `A_g=bh=${tx(crackIP.Ag, 0)}\\,\\mathrm{mm^2},\\quad I_g=bh^3/12=${tx(crackIP.Ig, 0)}\\,\\mathrm{mm^4},\\quad y_t=h/2=${tx(crackIP.yt, 1)}\\,\\mathrm{mm},\\quad Z_g=I_g/y_t=${tx(crackIP.Zg, 0)}\\,\\mathrm{mm^3}` },
             { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackIP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackIP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m}` },
             { caption: 'Cracked and effective inertia / 开裂及有效惯性矩', tex: `I_{cr}=${tx(crackIP.Icr, 0)}\\,\\mathrm{mm^4},\\quad I_e=(M_{cr,N}/M_a)^3I_g+[1-(M_{cr,N}/M_a)^3]I_{cr}=${tx(crackIP.Ie, 0)}\\,\\mathrm{mm^4}` },
             { caption: 'Crack-width equation / 裂缝宽度公式', tex: `f_{s,ch}=\\max(f_s-0.5f_{s,c},0)=${tx(crackIP.fsChange, 1)}\\,\\mathrm{MPa},\\quad \\beta'=${tx(crackIP.betaPrime, 3)},\\quad g_s=${tx(crackIP.gs, 1)}\\,\\mathrm{mm}` },
@@ -525,6 +526,7 @@ export function getPrecastPanelFormulaSections(inputs, results) {
         {
           sub: 'Out-of-plane flexural crack control / 平面外弯曲裂缝',
           formulas: [
+            { caption: 'Gross section properties / 毛截面特性 (1 m strip)', tex: `A_g=bh=${tx(crackOOP.Ag, 0)}\\,\\mathrm{mm^2},\\quad I_g=bh^3/12=${tx(crackOOP.Ig, 0)}\\,\\mathrm{mm^4/m},\\quad y_t=h/2=${tx(crackOOP.yt, 1)}\\,\\mathrm{mm},\\quad Z_g=I_g/y_t=${tx(crackOOP.Zg, 0)}\\,\\mathrm{mm^3/m}` },
             { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackOOP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m/m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackOOP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m/m}` },
             { caption: 'Cracked and effective inertia / 开裂及有效惯性矩', tex: `I_{cr}=${tx(crackOOP.Icr, 0)}\\,\\mathrm{mm^4/m},\\quad I_e=(M_{cr,N}/M_a)^3I_g+[1-(M_{cr,N}/M_a)^3]I_{cr}=${tx(crackOOP.Ie, 0)}\\,\\mathrm{mm^4/m}` },
             { caption: 'Crack-width equation / 裂缝宽度公式', tex: `f_{s,ch}=${tx(crackOOP.fsChange, 1)}\\,\\mathrm{MPa},\\quad \\beta'=${tx(crackOOP.betaPrime, 3)},\\quad g_s=${tx(crackOOP.gs, 1)}\\,\\mathrm{mm}` },
@@ -990,6 +992,7 @@ export function getPrecastPanelDetailSections(inputs, results) {
         {
           sub: '8.2 In-plane flexural crack control / 平面内裂缝验算',
           formulas: [
+            { caption: 'Gross section properties / 毛截面特性', tex: `A_g=bh=${tx(crackIP.Ag, 0)}\\,\\mathrm{mm^2},\\quad I_g=bh^3/12=${tx(crackIP.Ig, 0)}\\,\\mathrm{mm^4},\\quad y_t=h/2=${tx(crackIP.yt, 1)}\\,\\mathrm{mm},\\quad Z_g=I_g/y_t=${tx(crackIP.Zg, 0)}\\,\\mathrm{mm^3}` },
             { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackIP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackIP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m}` },
             { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `n=E_s/E_{c,SLS}=${tx(crackMaterial.Es / Math.max(crackMaterial.EcSls, 1), 3)},\\quad I_{cr}=I_{tr,0}-S_{tr}^2/A_{tr}=${tx(crackIP.Icr, 0)}\\,\\mathrm{mm^4}` },
             { caption: 'Effective inertia / 有效惯性矩 (NZS 3101 Cl. 6.8.3 Eq. 6-2)', tex: `I_e=(M_{cr,N}/M_a)^3I_g+[1-(M_{cr,N}/M_a)^3]I_{cr}=${tx(crackIP.Ie, 0)}\\,\\mathrm{mm^4}` },
@@ -1001,6 +1004,7 @@ export function getPrecastPanelDetailSections(inputs, results) {
         {
           sub: '8.3 Out-of-plane flexural crack control / 平面外裂缝验算',
           formulas: [
+            { caption: 'Gross section properties / 毛截面特性 (1 m strip)', tex: `A_g=bh=${tx(crackOOP.Ag, 0)}\\,\\mathrm{mm^2},\\quad I_g=bh^3/12=${tx(crackOOP.Ig, 0)}\\,\\mathrm{mm^4/m},\\quad y_t=h/2=${tx(crackOOP.yt, 1)}\\,\\mathrm{mm},\\quad Z_g=I_g/y_t=${tx(crackOOP.Zg, 0)}\\,\\mathrm{mm^3/m}` },
             { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackOOP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m/m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackOOP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m/m}` },
             { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `n=E_s/E_{c,SLS}=${tx(crackMaterial.Es / Math.max(crackMaterial.EcSls, 1), 3)},\\quad I_{cr}=${tx(crackOOP.Icr, 0)}\\,\\mathrm{mm^4/m}` },
             { caption: 'Effective inertia / 有效惯性矩 (screening adaptation of NZS 3101 Cl. 6.8.3)', tex: `I_e=(M_{cr,N}/M_a)^3I_g+[1-(M_{cr,N}/M_a)^3]I_{cr}=${tx(crackOOP.Ie, 0)}\\,\\mathrm{mm^4/m}` },
