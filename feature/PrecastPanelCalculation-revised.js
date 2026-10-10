@@ -1874,7 +1874,9 @@ function calculateFlexuralCrackDirection({
     shrinkageSteelStress,
     normalizedAxialLoadRatio,
     momentSource,
+    axialSource,
     momentInputConfirmed,
+    steelYieldStrength,
     direction
 }) {
     const b = positive(breadth);
@@ -1885,6 +1887,7 @@ function calculateFlexuralCrackDirection({
     const Zg = yt > 0 ? Ig / yt : 0;
     const N = finite(axialForce);
     const M = Math.abs(finite(moment));
+    const fy = positive(steelYieldStrength);
     const sigmaN = Ag > 0 ? N * 1000 / Ag : 0;
     const Mcr0 = Zg > 0 ? fr * Zg / 1e6 : Infinity;
     // Axial force adjustment derived from the gross-section edge-stress condition:
@@ -1916,7 +1919,9 @@ function calculateFlexuralCrackDirection({
         normalizedAxialLoadRatio,
         normalizedAxialLoadLimit: 0.06,
         momentSource,
+        axialSource,
         momentInputConfirmed,
+        steelYieldStrength: fy,
         limit: crackWidthLimit,
         codeReferences: {
             crackWidth: 'NZS 3101.1:2006 incl. A1/A2/A3, Cl. 2.4.4.6, Eqs. 2-7 to 2-9',
@@ -1932,6 +1937,7 @@ function calculateFlexuralCrackDirection({
         !(fr > 0) ||
         !(Es > 0) ||
         !(Ec > 0) ||
+        !(fy > 0) ||
         !Array.isArray(bars) ||
         bars.length === 0 ||
         !Number.isFinite(N) ||
@@ -2046,7 +2052,8 @@ function calculateFlexuralCrackDirection({
 
     const methodApplicable = normalizedAxialLoadRatio <= 0.06 &&
         Number.isFinite(Icr) && Icr > 0;
-    const numericalPass = valid && Number.isFinite(crackWidth) &&
+    const serviceSteelStressOK = Number.isFinite(fs) && fs <= fy + 1e-9;
+    const numericalPass = valid && serviceSteelStressOK && Number.isFinite(crackWidth) &&
         crackWidth >= 0 && crackWidth <= crackWidthLimit + 1e-9;
     const actionConfirmed = momentInputConfirmed === true;
     const pass = numericalPass && methodApplicable && actionConfirmed;
@@ -2072,6 +2079,7 @@ function calculateFlexuralCrackDirection({
         d,
         betaPrime,
         fs,
+        serviceSteelStressOK,
         fsChange,
         shrinkageSteelStress: positive(shrinkageSteelStress),
         cm,
@@ -2139,7 +2147,15 @@ export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {},
         });
     }
 
-    const ipAxial = finite(inPlane.elasticStress?.Nservice);
+    const ipAxialRaw = input.crackSlsAxialInPlane;
+    const ipAxialConfirmed = ipAxialRaw !== null && ipAxialRaw !== undefined &&
+        String(ipAxialRaw).trim() !== '' && Number.isFinite(Number(ipAxialRaw));
+    const ipAxial = ipAxialConfirmed
+        ? Number(ipAxialRaw)
+        : finite(inPlane.elasticStress?.Nservice);
+    const ipAxialSource = ipAxialConfirmed
+        ? 'User-entered governing SLS axial force'
+        : 'Automatic estimate from unfactored gravity actions';
     const ipAutoMoment = Math.abs(finite(inPlane.sectionActions?.Mlintel)) +
         Math.abs(positive(input.diaphragmWindForce) * positive(input.wallHeight));
     const ipOverride = positive(input.crackSlsMomentInPlane);
@@ -2150,7 +2166,7 @@ export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {},
     const ipNormalizedAxial = fc > 0 && positive(ipGeometry.Ag) > 0
         ? Math.abs(ipAxial * 1000 / (fc * ipGeometry.Ag))
         : Infinity;
-    const ipInputConfirmed = ipOverride > 0;
+    const ipInputConfirmed = ipOverride > 0 && ipAxialConfirmed;
 
     const calculateTwoSenses = (args) => {
         const first = calculateFlexuralCrackDirection({
@@ -2204,7 +2220,9 @@ export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {},
         shrinkageSteelStress: fsC,
         normalizedAxialLoadRatio: ipNormalizedAxial,
         momentSource: ipMomentSource,
-        momentInputConfirmed: ipInputConfirmed
+        axialSource: ipAxialSource,
+        momentInputConfirmed: ipInputConfirmed,
+        steelYieldStrength: positive(input.fy)
     });
 
     const oop = outOfPlane || {};
@@ -2229,7 +2247,15 @@ export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {},
         }];
     }
 
-    const oopAxial = finite(oop.N_GE) + finite(oop.Wq_line);
+    const oopAxialRaw = input.crackSlsAxialOutOfPlane;
+    const oopAxialConfirmed = oopAxialRaw !== null && oopAxialRaw !== undefined &&
+        String(oopAxialRaw).trim() !== '' && Number.isFinite(Number(oopAxialRaw));
+    const oopAxial = oopAxialConfirmed
+        ? Number(oopAxialRaw)
+        : finite(oop.N_GE) + finite(oop.Wq_line);
+    const oopAxialSource = oopAxialConfirmed
+        ? 'User-entered governing SLS axial force per metre'
+        : 'Automatic estimate from unfactored gravity actions per metre';
     const add = oop.additionalLoads || {};
     const oopMidWindMoment = Math.abs(finite(oop.MW) + finite(add.M_add_mid_F) + finite(add.M_add_mid_M));
     const oopBaseWindMoment = Math.abs(finite(oop.MbW));
@@ -2243,7 +2269,7 @@ export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {},
     const oopNormalizedAxial = fc > 0 && oopAg > 0
         ? Math.abs(oopAxial * 1000 / (fc * oopAg))
         : Infinity;
-    const oopInputConfirmed = oopOverride > 0;
+    const oopInputConfirmed = oopOverride > 0 && oopAxialConfirmed;
 
     const outOfPlaneResult = calculateTwoSenses({
         label: 'Out-of-plane flexural crack control',
@@ -2263,15 +2289,17 @@ export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {},
         shrinkageSteelStress: fsC,
         normalizedAxialLoadRatio: oopNormalizedAxial,
         momentSource: oopMomentSource,
-        momentInputConfirmed: oopInputConfirmed
+        axialSource: oopAxialSource,
+        momentInputConfirmed: oopInputConfirmed,
+        steelYieldStrength: positive(input.fy)
     });
 
     const warnings = [
         !material.densityInRange ? 'Concrete density is outside NZS 3101.1 Cl. 5.2.2 range 1800–2800 kg/m³; confirm the material model.' : null,
         ipNormalizedAxial > 0.015 ? 'In-plane normalized axial load exceeds 0.015; verify the BRANZ low-axial-load guide scope and use a rational model if required.' : null,
         oopNormalizedAxial > 0.015 ? 'Out-of-plane normalized axial load exceeds 0.015; verify the BRANZ low-axial-load guide scope and use a rational model if required.' : null,
-        !ipInputConfirmed ? 'In-plane SLS moment is an automatic screening estimate. Enter the governing SLS moment to confirm this check.' : null,
-        !oopInputConfirmed ? 'OOP SLS moment is an automatic screening estimate. Enter the governing SLS moment per metre to confirm this check.' : null,
+        !ipInputConfirmed ? 'In-plane crack check requires explicit governing SLS moment and SLS axial force inputs; automatic values are screening estimates only.' : null,
+        !oopInputConfirmed ? 'OOP crack check requires explicit governing SLS moment and SLS axial force per metre; automatic values are screening estimates only.' : null,
         fsC === 0 ? 'f_s,c is set to zero. This follows NZS 3101 Cl. 2.4.4.6 only where the applicable long-term unrestrained shrinkage condition is justified; otherwise estimate and enter f_s,c.' : null,
         'The 0.30 mm default crack-width limit is a project starting assumption, not a universal NZS 3101 limit. Set the acceptance limit for the project exposure and serviceability requirements.',
         'The calculation addresses flexural surface cracking only. It does not calculate restraint-induced thermal/shrinkage cracking, crack spacing provisions, durability detailing or a complete SLS load-combination envelope.'
@@ -2547,6 +2575,7 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
         ['wallHeight', 'Wall height'],
         ['wallThickness', 'Wall thickness'],
         ['partPeriod', 'Out-of-plane part period'],
+        ['crackWidthLimit', 'Project crack-width limit'],
         ['fc', "Concrete strength f'c"],
         ['fy', 'Reinforcement yield strength fy'],
         ['VbarDia', 'Vertical reinforcement diameter'],
@@ -2562,6 +2591,19 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
         const value = number(key);
         if (!Number.isFinite(value) || value <= 0) {
             errors.push(`${label} must be a finite value greater than zero.`);
+        }
+    }
+
+    for (const key of ['crackSlsAxialInPlane', 'crackSlsAxialOutOfPlane']) {
+        const value = input[key];
+        if (value !== null && value !== undefined && String(value).trim() !== '' && !Number.isFinite(Number(value))) {
+            errors.push(`${key} must be blank for automatic screening or a finite numeric SLS axial force.`);
+        }
+    }
+    for (const key of ['crackSlsMomentInPlane', 'crackSlsMomentOutOfPlane', 'crackShrinkageSteelStress']) {
+        const value = number(key);
+        if (!Number.isFinite(value) || value < 0) {
+            errors.push(`${key} must be a finite non-negative value.`);
         }
     }
 
