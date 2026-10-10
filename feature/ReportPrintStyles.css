@@ -1,0 +1,260 @@
+/* src/styles/ReportPrintStyles.css */
+
+/* =========================================
+   屏幕预览时的公式块通用样式
+========================================= */
+.formula-block {
+  margin: 6px 0;
+  padding: 4px 10px;
+  border-left: none;
+  background: transparent;
+  overflow-x: auto;
+  text-align: left;
+  line-height: 1.3;
+}
+
+.formula-block .katex-display {
+  text-align: left !important;
+  margin: 0.2em 0 !important;
+  display: block !important;
+}
+
+/* ★ 公式相对正文的大小（em，会随 #printable-report 基础字体一起缩放）
+      想让公式更大就把 0.95em 再调大，如 1.0em / 1.05em */
+.formula-block .katex-display > .katex {
+  text-align: left !important;
+  display: inline-block !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+  font-size: 0.95em !important;
+}
+
+/* 上标（mm²、mm⁴）相对公式的比例，一般不用动 */
+.formula-block .katex .msupsub {
+  font-size: 0.68em;
+}
+
+/* =========================================
+   Summary Report 两栏公式布局（节省纸张）
+========================================= */
+.formula-two-col {
+  columns: 2;
+  column-gap: 16px;
+}
+
+.formula-two-col .formula-col-item {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 4px;
+}
+
+.formula-two-col > .formula-col-item { min-width: 0; }
+/* =========================================
+   打印 / 导出 PDF 专用媒体查询
+   ★★ 报告字体大小主要在这里调整 ★★
+========================================= */
+@media print {
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+
+  html, body {
+    width: 210mm;
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #printable-report, #printable-report * {
+    visibility: visible;
+  }
+
+  /* ★ 基础字体：所有未单独设置字号的文字都继承它；
+        公式是 em 单位，也会跟着一起变大。
+        原 9pt → 10.5pt，可继续调到 11pt / 12pt */
+  #printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+    color: black;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 10.5pt;          /* ← 基础字体，改这里影响最大 */
+    line-height: 1.35;
+  }
+
+  .MuiBackdrop-root,
+  .report-toolbar {
+    display: none !important;
+  }
+
+  .MuiDialog-paper {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* ---- 报告头部 ---- */
+  .report-header {
+    text-align: center;
+    margin-bottom: 12px;
+    border-bottom: 2px solid #1976d2;
+    padding-bottom: 8px;
+  }
+
+  .report-header h1 {
+    font-size: 18pt;            /* 原 16pt */
+    color: #1976d2;
+    margin: 0;
+  }
+
+  .report-header h2 {
+    font-size: 13pt;            /* 原 11pt */
+    color: #1976d2;
+    margin-top: 4px;
+    font-weight: normal;
+  }
+
+  .job-info {
+    margin-top: 8px;
+    font-size: 10pt;            /* 原 8.5pt */
+    color: #333;
+    text-align: left;
+    display: inline-block;
+    line-height: 1.4;
+  }
+
+  /* ---- 报告段落与标题 ---- */
+  .report-section {
+    margin-top: 12px;
+  }
+
+  .report-section h3 {
+    font-size: 12.5pt;          /* 原 11pt，一级章节标题 */
+    color: #1976d2;
+    border-bottom: 1.5px solid #1976d2;
+    padding-bottom: 3px;
+    margin-bottom: 8px;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .report-section h4 {
+    font-size: 11pt;            /* 原 9.5pt，分段标题 */
+    color: #444;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* ---- 标准数据表格 ---- */
+  .report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+    font-size: 9.5pt;           /* 原 8pt */
+  }
+
+  .report-table th {
+    background-color: #1976d2;
+    color: white;
+    padding: 4px 6px;
+    text-align: left;
+    border: 0.5px solid #1565c0;
+    font-size: 9.5pt;           /* 原 8pt */
+  }
+
+  .report-table td {
+    padding: 3px 6px;
+    border: 0.5px solid #ddd;
+  }
+
+  .report-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+
+  .report-table td.num {
+    text-align: right;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  /* 打印时也缩小上标 */
+  .formula-block .katex .msupsub {
+    font-size: 0.68em;
+  }
+
+  /* ---- 紧凑型参数表（输入参数 / 结果摘要 / 利用率） ---- */
+  .compact-table td {
+    padding: 2px 4px !important;
+    font-size: 9pt !important;  /* 原 7.5pt */
+  }
+
+  .compact-table th {
+    padding: 3px 5px !important;
+    font-size: 9pt !important;  /* 原 7.5pt */
+  }
+
+  /* ---- 状态标识 ---- */
+  .status-ok {
+    color: #2e7d32;
+    font-weight: bold;
+  }
+
+  .status-fail {
+    color: #c62828;
+    font-weight: bold;
+  }
+
+  /* ---- SVG 图表容器 ---- */
+  .svg-container {
+    text-align: center;
+    max-width: 100%;
+    margin: 8px auto;
+    border: 1px solid #eee;
+    padding: 6px;
+  }
+
+  .svg-container svg {
+    width: 100%;
+    height: auto;
+  }
+
+  /* ---- 页脚与免责声明 ---- */
+  .report-footer {
+    margin-top: 20px;
+    padding-top: 8px;
+    border-top: 1px solid #ccc;
+    font-size: 8.5pt;           /* 原 7pt */
+    color: #666;
+    text-align: center;
+  }
+
+  /* ---- 分页控制 ---- */
+  .page-break {
+    page-break-before: always;
+  }
+
+  .first-page-content {
+    page-break-after: always;
+  }
+}
