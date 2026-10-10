@@ -1323,8 +1323,10 @@ export function calculateOutOfPlaneDesign(input = {}) {
     /* 0.75 刚度折减（NZS 3101 Cl 11.3.4.2 / Eq 11-3 分母） */
     const pDeltaFactor = (Ec * Icr) > 0 ?
         (N_design_N * Math.pow(hroof_mm, 2)) / (k_pdelta * 0.75 * Ec * Icr) :
-        0;
-    const pDeltaStable = pDeltaFactor < 0.95;
+        Infinity;
+    // Zero/non-finite flexural stiffness is an invalid stability calculation,
+    // not a zero second-order effect.
+    const pDeltaStable = Number.isFinite(pDeltaFactor) && pDeltaFactor < 0.95;
     const pDeltaDenominator = 1 - pDeltaFactor;
 
     /* 最小偏心距（NZS 3101 Cl 11.3.1.2）：M* ≥ N*×0.05t */
@@ -1847,16 +1849,27 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
         }
     }
 
-    if (number('baseDowelCount') <= 0 || number('baseDowelDiameter') <= 0) {
-        errors.push('Base connection requires a positive dowel count and diameter.');
+    const baseDowelCount = number('baseDowelCount');
+    const baseDowelDiameter = number('baseDowelDiameter');
+    if (
+        !Number.isFinite(baseDowelCount) || baseDowelCount <= 0 ||
+        !Number.isFinite(baseDowelDiameter) || baseDowelDiameter <= 0
+    ) {
+        errors.push('Base connection requires a finite, positive dowel count and diameter.');
     }
-    if (number('baseDowelEmbedment') <= 0) {
-        errors.push('Base dowel embedment must be positive.');
+    const embedment = number('baseDowelEmbedment');
+    if (!Number.isFinite(embedment) || embedment <= 0) {
+        errors.push('Base dowel embedment must be finite and positive.');
     }
-    if (number('wallThickness') > 0 && number('wallThickness') < 0.1) {
-        errors.push('Wall thickness is below 100 mm; check the NZS 3101 wall thickness requirements.');
+    const wallThickness = number('wallThickness');
+    if (Number.isFinite(wallThickness) && wallThickness > 0 && wallThickness < 0.1) {
+        warnings.push('Wall thickness is below 100 mm; confirm the applicable NZS 3101 minimum thickness, cover and detailing requirements for this wall system.');
     }
-    if (number('wallThickness') > 0.2 && number('BarLayers') < 2) {
+    const barLayers = number('BarLayers');
+    if (
+        Number.isFinite(wallThickness) && wallThickness > 0.2 &&
+        (!Number.isFinite(barLayers) || barLayers < 2)
+    ) {
         errors.push('Wall thickness exceeds 200 mm but fewer than two reinforcement layers are specified.');
     }
 
