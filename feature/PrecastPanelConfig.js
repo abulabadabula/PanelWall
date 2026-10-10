@@ -202,15 +202,25 @@ export const INPUT_SECTIONS = [
     ]
   },
   {
+    id: 'crackControl',
+    title: '14. SLS Crack Control (In-Plane + OOP)',
+    fields: [
+      { key: 'crackWidthLimit', label: 'Project Crack Width Limit', unit: 'mm', step: '0.05', min: '0.05' },
+      { key: 'crackShrinkageSteelStress', label: 'Pre-cracking Steel Stress f_s,c', unit: 'MPa', step: '5', min: '0' },
+      { key: 'crackSlsMomentInPlane', label: 'In-Plane SLS Moment Override (0 = auto estimate)', unit: 'kN·m', step: '1', min: '0' },
+      { key: 'crackSlsMomentOutOfPlane', label: 'OOP SLS Moment Override (0 = auto estimate)', unit: 'kN·m/m', step: '0.1', min: '0' }
+    ]
+  },
+  {
     id: 'foundation',
-    title: '14. Foundation and Hold Down Check',
+    title: '15. Foundation and Hold Down Check',
     fields: [
       { key: 'qU', label: 'Ultimate Bearing Capacity (qU)', unit: 'kPa', step: '10', min: '0' }
     ]
   },
   {
     id: 'connection',
-    title: '15. Base Connection (Connection Design)',
+    title: '16. Base Connection (Connection Design)',
     fields: [
       { key: 'baseDowelDiameter', label: 'Base Dowel Diameter', unit: 'mm', step: '1', min: '6' },
       { key: 'baseDowelCount', label: 'Base Dowel Count', unit: 'bars', step: '1', min: '0' },
@@ -223,7 +233,7 @@ export const INPUT_SECTIONS = [
   },
   {
     id: 'inPlaneFoundation',
-    title: '16. In-Plane Foundation (Footing Checks)',
+    title: '17. In-Plane Foundation (Footing Checks)',
     fields: [
       { key: 'footingWidth', label: 'Footing Width B', unit: 'm', step: '0.05', min: '0.1' },
       { key: 'footingLength', label: 'Footing Length L', unit: 'm', step: '0.05', min: '0.1' },
@@ -394,6 +404,13 @@ export const DEFAULT_INPUTS = {
   phiFlexure: 0.80,
   phiShear: 0.75,
   phiCompression: 0.75,
+
+  /* SLS crack control. The 0.30 mm default is a project starting assumption,
+     not a universal NZS 3101 limit. Confirm exposure and serviceability criteria. */
+  crackWidthLimit: 0.30,
+  crackShrinkageSteelStress: 0,
+  crackSlsMomentInPlane: 0,
+  crackSlsMomentOutOfPlane: 0,
 
   /* --------------------------------------------------------------------------
   13. Foundation and Hold Down Check
