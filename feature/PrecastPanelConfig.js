@@ -12,7 +12,7 @@ v0.5 说明（与参考引擎 PanelWallInPlaneDesign.jsx / PrecastPanelOOPDesign
 已由 PrecastPanelCalculation.js v0.5 的连接与基础模块实际使用。
 
 v0.6 说明：
-OOP 地震作用改按 AS/NZS 1170.5:2004 第 8 章（Parts and components）计算：
+OOP 地震作用改按 NZS 1170.5:2004 第 8 章（Parts and components）计算：
 墙体作为 part，Fp = Cp × H × Wp（§8.4.2.2 / §8.5.1）。
 移除旧的 OOP 地震系数输入 CdT1 / CdTE，新增 part 参数：
   partSpectralShapeFactorT0 —— Cp（Table 8.1，预制墙板默认 1.33）
@@ -38,7 +38,7 @@ export const CODE_BASIS = {
     general: 'AS/NZS 1170.0',
     permanent: 'AS/NZS 1170.1',
     wind: 'AS/NZS 1170.2:2021',
-    earthquake: 'AS/NZS 1170.5'
+    earthquake: 'NZS 1170.5'
   },
   concrete: {
     standard: 'NZS 3101.1:2006',
@@ -149,7 +149,7 @@ export const INPUT_SECTIONS = [
     id: 'oopseismic',
     title: '9. Seismic Parameters (OOP)',
     fields: [
-      /* v0.7 —— OOP 地震改按 AS/NZS 1170.5 Chapter 8 (parts) 计算  */
+      /* v0.7 —— OOP 地震改按 NZS 1170.5 Chapter 8 (parts) 计算  */
       { key: 'partSpectralShapeFactorT0', label: 'OOP Part Response Coefficient Cp', unit: '', step: '0.05', min: '0' },
       { key: 'partHeightHx', label: 'OOP Part Height hx (above base)', unit: 'm', step: '0.1', min: '0' },
       { key: 'buildingHeightHn', label: 'Building Height hn', unit: 'm', step: '0.1', min: '0.1' },
@@ -324,8 +324,8 @@ export const DEFAULT_INPUTS = {
 
   /* --------------------------------------------------------------------------
   8. UNIFIED Seismic Parameters (In-Plane + OOP)
-  in-plane seismic design is based on AS/NZS 1170.5:2004, Clause 3.2.2
-  out-of-plane seismic design is based on AS/NZS 1170.5:2004, Chapter 8
+  in-plane seismic design is based on NZS 1170.5:2004, Clause 3.2.2
+  out-of-plane seismic design is based on NZS 1170.5:2004, Chapter 8
   (Parts and components) —— 墙体作为 part 计算平面外地震作用：
       Fp = Cp × H × Wp                    （§8.4.2.2 / §8.5.1）
       H  = 1 + 2(hx/hn)                   （§8.4.2.3）
@@ -343,7 +343,7 @@ export const DEFAULT_INPUTS = {
   // seismicWeight: 150,
   // seismicDistributionFactor: 1.0,
   psiE: 0.30,
-  /* v0.6 —— AS/NZS 1170.5 Chapter 8 part 参数 */
+  /* v0.6 —— NZS 1170.5 Chapter 8 part 参数 */
   partSpectralShapeFactorT0: 1.33,
   partHeightHx: 2.0,
   buildingHeightHn: 4.0,
