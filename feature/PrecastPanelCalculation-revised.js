@@ -85,7 +85,7 @@ export function calculateInPlaneSectionChecks(input = {}, inPlane = {}) {
     const L = lw * 1000;
     const t = tw * 1000;
 
-    const Nstar = positive(sectionactions.Ntotal || gravity.Ngravity);
+    const Nstar = positive(sectionactions.Ntotal ?? gravity.Ngravity);
     const Mstar = positive(sectionactions.Mtotal);
     const Vstar = positive(sectionactions.Vtotal);
 
@@ -205,38 +205,52 @@ export function calculateInPlaneSectionChecks(input = {}, inPlane = {}) {
     let cLow = Math.max(0.1, L * 0.0001);
     let cHigh = Math.max(L * 20, 1000);
     let sectionResult = null;
+    let neutralAxisConverged = false;
 
     let lowResult = evaluateSection(cLow);
     let highResult = evaluateSection(cHigh);
-
     let expandCount = 0;
-    while ((lowResult.Pn - Ntarget) * (highResult.Pn - Ntarget) > 0 && expandCount < 20) {
+    const hasSignChange = (low, high) =>
+        (low.Pn - Ntarget) * (high.Pn - Ntarget) <= 0;
+
+    let bracketed = hasSignChange(lowResult, highResult);
+    while (!bracketed && expandCount < 20) {
         cHigh *= 2;
         highResult = evaluateSection(cHigh);
+        bracketed = hasSignChange(lowResult, highResult);
         expandCount++;
     }
 
-    for (let i = 0; i < 120; i++) {
-        const cMid = (cLow + cHigh) / 2;
-        const result = evaluateSection(cMid);
-        const error = result.Pn - Ntarget;
-        sectionResult = result;
+    if (bracketed) {
+        for (let i = 0; i < 120; i++) {
+            const cMid = (cLow + cHigh) / 2;
+            const result = evaluateSection(cMid);
+            const error = result.Pn - Ntarget;
+            sectionResult = result;
 
-        if (Math.abs(error) < Math.max(10, Math.abs(Ntarget) * 1e-6)) {
-            break;
-        }
+            if (Math.abs(error) <= Math.max(10, Math.abs(Ntarget) * 1e-6)) {
+                neutralAxisConverged = true;
+                break;
+            }
 
-        const lowError = lowResult.Pn - Ntarget;
-        if (lowError * error <= 0) {
-            cHigh = cMid;
-            highResult = result;
-        } else {
-            cLow = cMid;
-            lowResult = result;
+            const lowError = lowResult.Pn - Ntarget;
+            if (lowError * error <= 0) {
+                cHigh = cMid;
+                highResult = result;
+            } else {
+                cLow = cMid;
+                lowResult = result;
+            }
         }
     }
 
-    if (!sectionResult) { sectionResult = evaluateSection(L / 2); }
+    // Retain a diagnostic endpoint if no equilibrium root is bracketed, but
+    // do not report the resulting capacity as a valid section check.
+    if (!sectionResult) {
+        const lowError = Math.abs(lowResult.Pn - Ntarget);
+        const highError = Math.abs(highResult.Pn - Ntarget);
+        sectionResult = lowError <= highError ? lowResult : highResult;
+    }
 
     const neutralAxis = sectionResult.c;
     const compressionBlockDepth = sectionResult.a;
@@ -244,14 +258,19 @@ export function calculateInPlaneSectionChecks(input = {}, inPlane = {}) {
     const nominalAxial = sectionResult.Pn / 1000;
     const nominalMoment = sectionResult.Mn / 1e6;
     const phiMn = phiFlexure * nominalMoment;
-    const momentRatio = phiMn > 0 ? Mstar / phiMn : Infinity;
+    const momentRatio = neutralAxisConverged && phiMn > 0 ? Mstar / phiMn : Infinity;
 
     /* P0 扣除钢筋面积（NZS 3101 Cl 10.3.4.2 形式） */
     const P0 = alpha1 * fcPrime * Math.max(Ag - AsTotal, 0) + AsTotal * fy;
     const phiPn = phiFlexure * P0 / 1000;
-    const axialRatio = phiPn > 0 ? Nstar / phiPn : 0;
-
-    const interactionRatio = momentRatio;
+    const axialRatio = phiPn > 0 ? Nstar / phiPn : (Nstar > 0 ? Infinity : 0);
+    const sectionCheckPass =
+        neutralAxisConverged &&
+        Number.isFinite(momentRatio) &&
+        momentRatio <= 1 &&
+        Number.isFinite(axialRatio) &&
+        axialRatio <= 1;
+    const interactionRatio = Math.max(momentRatio, axialRatio);
 
     const grossConcreteCapacity = fcPrime * Ag;
     const lowAxialRatio = grossConcreteCapacity > 0 ? (Nstar * 1000) / grossConcreteCapacity : 0;
@@ -299,6 +318,8 @@ export function calculateInPlaneSectionChecks(input = {}, inPlane = {}) {
         bars,
         AsTotal,
         neutralAxis,
+        neutralAxisConverged,
+        sectionCheckPass,
         compressionBlockDepth,
         concreteCompression,
         nominalAxial,
@@ -788,7 +809,8 @@ export function calculateInPlaneDesign(input = {}) {
         {
             geometry: { bwall, hwall, twall, Ag, I, Zg },
             gravity: { Ngravity },
-            sectionActions: { Mtotal, Vtotal },
+            // Axial force and bending demand must refer to the same design case.
+            sectionActions: { Ntotal: NseismicCompression, Mtotal, Vtotal },
             elasticStress: { sigmaN, sigmaM, sigmaMax, sigmaMin, eccentricity }
         }
     );
@@ -938,7 +960,8 @@ export function calculateInPlaneDesign(input = {}) {
             sectionSizeOK,
             minSteelOK,
             spacingOK,
-            verticalRatioOK
+            verticalRatioOK,
+            sectionCheckPass: sectionChecks.sectionCheckPass
         }
     };
 }
@@ -1798,80 +1821,150 @@ export function calculateFoundationDesign(input = {}, inPlane = {}) {
 /* ============================================================================
 SUMMARY
 =========================================================================== */
-export function buildDesignSummary(inPlane, outOfPlane, connection, foundation) {
+export function validateDesignInputs(input = {}, inPlane = {}) {
+    const errors = [];
+    const warnings = [];
+    const number = (key) => Number(input[key]);
+    const positiveKeys = [
+        ['wallWidth', 'Wall width'],
+        ['wallHeight', 'Wall height'],
+        ['wallThickness', 'Wall thickness'],
+        ['fc', "Concrete strength f'c"],
+        ['fy', 'Reinforcement yield strength fy'],
+        ['VbarDia', 'Vertical reinforcement diameter'],
+        ['VbarSpace', 'Vertical reinforcement spacing'],
+        ['HbarDia', 'Horizontal reinforcement diameter'],
+        ['HbarSpace', 'Horizontal reinforcement spacing'],
+        ['footingWidth', 'Foundation width'],
+        ['footingLength', 'Foundation length'],
+        ['footingThickness', 'Foundation thickness'],
+        ['allowableBearingPressure', 'Allowable bearing pressure']
+    ];
+    for (const [key, label] of positiveKeys) {
+        const value = number(key);
+        if (!Number.isFinite(value) || value <= 0) {
+            errors.push(`${label} must be a finite value greater than zero.`);
+        }
+    }
+
+    if (number('baseDowelCount') <= 0 || number('baseDowelDiameter') <= 0) {
+        errors.push('Base connection requires a positive dowel count and diameter.');
+    }
+    if (number('baseDowelEmbedment') <= 0) {
+        errors.push('Base dowel embedment must be positive.');
+    }
+    if (number('wallThickness') > 0 && number('wallThickness') < 0.1) {
+        errors.push('Wall thickness is below 100 mm; check the NZS 3101 wall thickness requirements.');
+    }
+    if (number('wallThickness') > 0.2 && number('BarLayers') < 2) {
+        errors.push('Wall thickness exceeds 200 mm but fewer than two reinforcement layers are specified.');
+    }
+
+    const N = Number(inPlane.sectionActions?.NseismicCompression);
+    const fc = number('fc');
+    const Ag = Number(inPlane.geometry?.Ag);
+    if (Number.isFinite(N) && Number.isFinite(fc) && fc > 0 && Ag > 0) {
+        const normalisedAxialLoad = N * 1000 / (fc * Ag);
+        if (normalisedAxialLoad > 0.015) {
+            warnings.push(
+                `Normalised axial load N*/(f'c Ag) = ${normalisedAxialLoad.toFixed(4)} exceeds 0.015; verify applicability of the BRANZ low-axial-load guide.`
+            );
+        }
+    }
+    return { valid: errors.length === 0, errors, warnings };
+}
+
+/* ============================================================================ 
+DESIGN SUMMARY
+=========================================================================== */
+export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation = {}) {
+    const ipChecks = inPlane?.checks || {};
     const inPlaneChecks = [
-        inPlane.checks.stressCompressionPass,
-        inPlane.checks.bearingPass,
-        inPlane.checks.interactionPass,
-        inPlane.checks.shearPass,
-        inPlane.checks.tensionPass,
-        inPlane.checks.boundaryNMPass !== false,
-        inPlane.checks.sectionSizeOK !== false,
-        inPlane.checks.minSteelOK !== false,
-        inPlane.checks.spacingOK !== false,
-        inPlane.checks.verticalRatioOK !== false
+        ipChecks.stressCompressionPass,
+        ipChecks.bearingPass,
+        ipChecks.interactionPass,
+        ipChecks.sectionCheckPass,
+        ipChecks.shearPass,
+        ipChecks.tensionPass,
+        ipChecks.boundaryNMPass !== false,
+        ipChecks.sectionSizeOK !== false,
+        ipChecks.minSteelOK !== false,
+        ipChecks.spacingOK !== false,
+        ipChecks.verticalRatioOK !== false
     ].every(Boolean);
-    const oopChecks = outOfPlane.overallOK;
-    const connectionChecks = connection?.checks?.overallPass ?? true;
-    const foundationChecks = foundation?.checks?.overallPass ?? true;
-    const slendernessWarning = inPlane.checks.slendernessWarning;
-    const hroofWarning = !outOfPlane.hroofValidation.hroofValid;
-    const pDeltaWarning = outOfPlane.pDeltaStable === false;
-    const stabilityWarning = outOfPlane.stability && outOfPlane.stability.allOK === false;
-    const slenderMethodWarning = outOfPlane.pDelta && outOfPlane.pDelta.slenderMethodApplicable === false;
-    /* h/t > 25 提示：对按 BRANZ 指南设计的细长墙板，h/t ≤ 75 且稳定性四项
-       检查（stability.allOK）才是正式判据，此处仅作信息性警告，不阻断通过。 */
-    const overallPass =
+    const oopChecks = outOfPlane?.overallOK === true;
+    // A missing result is not equivalent to a successful check.
+    const connectionChecks = connection?.checks?.overallPass === true;
+    const foundationChecks = foundation?.checks?.overallPass === true;
+    const slendernessWarning = Boolean(ipChecks.slendernessWarning);
+    const hroofWarning = outOfPlane?.hroofValidation?.hroofValid === false;
+    const pDeltaWarning = outOfPlane?.pDeltaStable === false;
+    const stabilityWarning = outOfPlane?.stability?.allOK === false;
+    const slenderMethodWarning = outOfPlane?.pDelta?.slenderMethodApplicable === false;
+    const validationErrors = Array.isArray(validation.errors) ? validation.errors : [];
+    const validationWarnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+
+    // Critical items below remain incomplete. The application may report individual
+    // screening checks, but must not advertise an overall code-compliant design.
+    const reviewItems = [
+        'SLS crack-width verification is not implemented.',
+        'In-plane drift/deflection and explicit SLS out-of-plane deflection limits are not verified; the reported P-Delta displacement is not an SLS serviceability check.',
+        'The full AS/NZS 1170.0 ULS/SLS load-combination envelope and reverse-action cases are not generated; verify wind, earthquake, gravity and diaphragm actions separately.',
+        'Foundation verification is limited to simplified bearing/sliding/uplift screening; footing flexure, one-way/punching shear, reinforcement development, geotechnical settlement and complete bearing pressure cases are not checked.',
+        'Base connection verification is simplified; concrete breakout/splitting/pry-out, dowel bending, edge distances, anchorage details and tension-shear interaction are not fully checked.',
+        'The out-of-plane stability, second-order and fire checks require independent verification against the project-adopted BRANZ/NZS 3101 clauses and assumptions.'
+    ];
+    const implementedChecksPass =
         inPlaneChecks &&
         oopChecks &&
         connectionChecks &&
         foundationChecks &&
+        validationErrors.length === 0 &&
         !hroofWarning &&
         !pDeltaWarning &&
         !stabilityWarning;
+
+    // Deliberately false until each critical review item is implemented and validated.
+    const designComplete = false;
+    const overallPass = implementedChecksPass && designComplete;
+    const warnings = [
+        ...validationErrors,
+        ...validationWarnings,
+        slendernessWarning ?
+            'Wall h/t exceeds 25. The BRANZ slender-panel applicability and stability checks must be verified.' : null,
+        hroofWarning ?
+            `hroof exceeds maximum allowed value (${Number(outOfPlane?.hroofValidation?.hroofMax || 0).toFixed(2)} m). Correct the input; it was clamped for calculation.` : null,
+        pDeltaWarning ?
+            'OOP P-Delta amplification has reached the stability limit; the finite elastic result is not valid.' : null,
+        stabilityWarning ?
+            'Panel stability checks (H/t, kH/t, Euler and Vlasov) are not all satisfied.' : null,
+        slenderMethodWarning ?
+            'NZS 3101 Cl 11.3.5.1.2 simplified P-Delta method is outside its stated scope; use a rational analysis.' : null,
+        !inPlaneChecks ? 'One or more implemented in-plane checks failed or are invalid.' : null,
+        !oopChecks ? 'One or more implemented out-of-plane checks failed or are invalid.' : null,
+        !connectionChecks ? 'Connection checks failed or are unavailable; do not treat the connection as verified.' : null,
+        !foundationChecks ? 'Foundation checks failed or are unavailable; do not treat the foundation as verified.' : null,
+        ...reviewItems
+    ].filter(Boolean);
+
     return {
         inPlanePass: inPlaneChecks,
         outOfPlanePass: oopChecks,
         connectionPass: connectionChecks,
         foundationPass: foundationChecks,
+        implementedChecksPass,
+        designComplete,
+        reviewRequired: true,
+        reviewItems,
+        validation,
         slendernessWarning,
         hroofWarning,
         pDeltaWarning,
         stabilityWarning,
         slenderMethodWarning,
         overallPass,
-        warnings: [
-            slendernessWarning ?
-                'Wall h/t exceeds 25 (non-slender limit). Slender panel design relies on the BRANZ guide §8.4 stability checks (H/t ≤ 75, kH/t ≤ 65, Euler, Vlasov) — refer to outOfPlane.stability.' :
-                null,
-            hroofWarning ?
-                `hroof exceeds maximum allowed value (${outOfPlane.hroofValidation.hroofMax.toFixed(2)} m). Value has been clamped.` :
-                null,
-            pDeltaWarning ?
-                'OOP P-Delta amplification has reached the stability limit; the finite elastic result is not valid.' :
-                null,
-            stabilityWarning ?
-                'Panel stability checks (H/t ≤ 75, kH/t ≤ 65, Euler, Vlasov) per BRANZ guide §8.4 are NOT all satisfied.' :
-                null,
-            slenderMethodWarning ?
-                'NZS 3101 Cl 11.3.5.1.2 simplified P-delta method is outside its scope (cantilever or N*/Ag ≥ 0.06fc); use rational analysis (Cl 11.3.4.2).' :
-                null,
-            !inPlaneChecks ?
-                'One or more in-plane checks failed.' :
-                null,
-            !oopChecks ?
-                'One or more out-of-plane checks failed.' :
-                null,
-            !connectionChecks ?
-                'One or more base connection checks failed.' :
-                null,
-            !foundationChecks ?
-                'One or more in-plane foundation checks failed.' :
-                null,
-            inPlane.checks.boundaryNMPass === false ?
-                'Boundary element local N-M check failed.' :
-                null
-        ].filter(Boolean)
+        status: 'PRELIMINARY — ENGINEERING REVIEW REQUIRED',
+        warnings
     };
 }
 
@@ -1884,13 +1977,15 @@ export function calculatePrecastPanelDesign(rawInput = {}) {
     const outOfPlane = calculateOutOfPlaneDesign(input);
     const connection = calculateConnectionDesign(input, inPlane, outOfPlane);
     const foundation = calculateFoundationDesign(input, inPlane);
-    const summary = buildDesignSummary(inPlane, outOfPlane, connection, foundation);
+    const validation = validateDesignInputs(input, inPlane);
+    const summary = buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation);
     return {
         input,
         inPlane,
         outOfPlane,
         connection,
         foundation,
+        validation,
         summary,
         meta: {
             engine: 'PrecastPanelCalculation',
