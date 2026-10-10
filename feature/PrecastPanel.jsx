@@ -318,6 +318,13 @@ function InputTab({ inputs, setInputs, previewResults }) {
               Engine will use clamped value {fmt(hroofCheck.hroofEffective, 2)} m.
             </Alert>
           )}
+          {section.id === 'crackControl' && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              The default 0.30 mm width is a project starting assumption, not a universal NZS 3101 limit.
+              A zero SLS-moment override uses a screening estimate from existing wind/lintel inputs, not a full SLS load-combination envelope.
+              Enter the governing SLS moment and axial force for each direction to confirm the crack-width calculation. For NZS 3101 Cl. 2.4.4.1, use the required serviceability combinations excluding wind/seismic; any wind/seismic-driven crack check is supplemental and must be identified as such. Leave axial force blank only for screening. Set f_s,c to zero only where the NZS 3101 shrinkage condition is justified; otherwise estimate the pre-cracking steel stress.
+            </Alert>
+          )}
           {section.id === 'gravity' && (
             <Alert severity="info" sx={{ mt: 2 }}>
               Line load = Pressure × Tributary Range (Sr). Roof wind pressure (wwd) is included here.
@@ -1326,14 +1333,145 @@ function FoundationBlock({ inputs, inPlane, outOfPlane, foundation }) {
   );
 }
 
+
 /* ---------------------------------------------------------------------------
-   12. Utilisation Summary
+   12. SLS Crack Control — In-Plane and Out-of-Plane
    --------------------------------------------------------------------------- */
-function UtilisationSummaryBlock({ inPlane, outOfPlane, connection, foundation }) {
+function CrackControlBlock({ inputs, materials, crackControl }) {
+  const cc = crackControl || {};
+  const mat = cc.materials || materials?.concrete || {};
+  const ip = cc.inPlane || {};
+  const op = cc.outOfPlane || {};
+  const statusFor = result => ({
+    label: result?.checks?.status || 'NOT VERIFIED',
+    pass: result?.checks?.pass === true
+  });
+
+  const renderDirection = (result, directionLabel) => {
+    const momentUnit = directionLabel.includes('Out-of-plane') ? '\\,\\mathrm{kN\\cdot m/m}' : '\\,\\mathrm{kN\\cdot m}';
+    return (
+      <CalculationSubsection title={directionLabel}>
+        <CalculationFormula
+          caption="Gross section properties / 毛截面特性"
+          formula={"A_g=bh=" + fmt(result.Ag, 0) + "\\,\\mathrm{mm^2},\\quad I_g=\\frac{bh^3}{12}=" + fmt(result.Ig, 0) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{mm^4/m}" : "\\,\\mathrm{mm^4}") + ",\\quad y_t=\\frac{h}{2}=" + tx(result.yt, 1) + "\\,\\mathrm{mm},\\quad Z_g=\\frac{I_g}{y_t}=" + fmt(result.Zg, 0) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{mm^3/m}" : "\\,\\mathrm{mm^3}")}
+        />
+        <CalculationFormula
+          caption="Gross-section cracking moment / 毛截面开裂弯矩（NZS 3101 Cl. 6.8.3 Eq. 6-2a）"
+          formula={"M_{cr,0}=\\frac{f_r I_g}{y_t}=" + tx(result.Mcr0, 2) + momentUnit}
+        />
+        <CalculationFormula
+          caption="Axial-force-adjusted cracking moment / 轴力修正开裂弯矩（由毛截面边缘应力推导）"
+          formula={"M_{cr,N}=\\left(f_r+\\frac{N_{SLS}}{A_g}\\right)\\frac{I_g}{y_t}=" + tx(result.McrAxial, 2) + momentUnit}
+          highlight
+        />
+        <CalculationFormula
+          caption="Transformed cracked stiffness / 换算开裂截面刚度"
+          formula={"n=\\frac{E_s}{E_{c,SLS}}=" + tx(mat.Es / Math.max(mat.EcSls, 1), 3) + ",\\quad I_{cr}=I_{tr,0}-\\frac{S_{tr}^2}{A_{tr}}=" + fmt(result.Icr, 0) + "\\,\\mathrm{mm^4}"}
+          status={mkStatus(result.valid && Number.isFinite(result.Icr), 'CALCULATED', 'NOT VERIFIED')}
+        />
+        <CalculationFormula
+          caption="Effective inertia ratio / 有效惯性矩系数（轴力修正筛查）"
+          formula={"r=\\operatorname{clamp}\\left(\\frac{\\max(M_{cr,N},0)}{M_a},0,1\\right)=" + tx(result.inertiaRatio, 3)}
+          status={mkStatus(result.valid && Number.isFinite(result.inertiaRatio), 'CALCULATED', 'NOT VERIFIED')}
+        />
+        <CalculationFormula
+          caption="Effective inertia / 有效惯性矩（NZS 3101 Cl. 6.8.3 Eq. 6-2; axial-load adaptation is a screening estimate）"
+          formula={"I_e=r^3I_g+(1-r^3)I_{cr}\\le I_g=" + fmt(result.Ie, 0) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{mm^4/m}" : "\\,\\mathrm{mm^4}")}
+          status={mkStatus(result.valid && Number.isFinite(result.Ie), 'CALCULATED', 'NOT VERIFIED')}
+        />
+        <CalculationFormula
+          caption="Tension steel stress and shrinkage correction / 受拉筋应力与收缩修正（NZS 3101 Cl. 2.4.4.6 Eq. 2-7）"
+          formula={"f_{s,ch}=\\max\\left(f_s-0.5f_{s,c},0\\right)=\\max\\left(" + tx(result.fs, 1) + "-0.5\\times" + tx(cc.shrinkageSteelStress, 1) + ",0\\right)=" + tx(result.fsChange, 1) + "\\,\\mathrm{MPa}"}
+        />
+        <CalculationFormula
+          caption="Crack-width geometry / 裂缝宽度几何系数（NZS 3101 Eqs. 2-8 and 2-9）"
+          formula={"\\beta'=\\frac{y-kd}{d-kd}=" + tx(result.betaPrime, 3) + ",\\quad g_s=\\sqrt{\\left(\\frac{s}{2}\\right)^2+c_m^2}=" + tx(result.gs, 1) + "\\,\\mathrm{mm}"}
+        />
+        <CalculationFormula
+          caption="Surface crack width / 表面裂缝宽度"
+          formula={"w=\\frac{2.0\\beta' f_{s,ch} g_s}{E_s}=" + tx(result.crackWidth, 3) + "\\,\\mathrm{mm},\\quad UR_w=\\frac{w}{w_{lim}}=" + txUR(result.crackWidthUtilisation)}
+          status={statusFor(result)}
+          highlight
+        />
+        <CalculationFormula
+          caption="SLS actions used / 本次采用的服务作用"
+          formula={"N_{SLS}=" + tx(result.axialForce, 2) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{kN/m}" : "\\,\\mathrm{kN}") + ",\\quad M_{SLS}=" + tx(result.serviceMoment, 2) + momentUnit}
+        />
+        <CalculationFormula
+          caption="Cracking moment source / 开裂弯矩计算依据"
+          formula={"\\sigma_N=" + tx(result.sigmaN, 3) + "\\,\\mathrm{MPa},\\quad f_r=" + tx(result.fr, 3) + "\\,\\mathrm{MPa}"}
+        />
+        <Alert severity={result.checks?.actionConfirmed ? (result.checks?.numericalPass ? 'success' : 'error') : 'warning'} sx={{ mt: 1 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>Status: {result.checks?.status || 'NOT VERIFIED'}</Typography>
+          <Typography variant="body2">
+            SLS moment source: {result.momentSource}. SLS axial-force source: {result.axialSource}. {result.direction || 'Governing bending sense'}.
+            {result.serviceSteelStressOK === false
+              ? ' Calculated service tensile reinforcement stress exceeds fy; check the action units and section model.'
+              : ''}
+            {result.normalizedAxialLoadRatio > 0.015
+              ? ' Normalized axial load exceeds 0.015; independently verify BRANZ low-axial-load scope and the cracked-section model.'
+              : ''}
+            {' Effective inertia I_e from Cl. 6.8.3 is based on a beam/slab empirical model for members without significant axial load; its use for a wall panel is screening only and must be independently justified.'}
+          </Typography>
+        </Alert>
+      </CalculationSubsection>
+    );
+  };
+
+  return (
+    <CalculationSection number="12" title="SLS Crack Control · 平面内外裂缝验算" chip={<Chip size="small" label="NZS 3101 Cl. 2.4.4.1 / 2.4.4.6 / 6.8.3" />}>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        <Typography variant="body2">
+          Flexural surface crack width is estimated separately for in-plane and out-of-plane bending.
+          Concrete properties are shared. The gross-section cracking moment, axial-adjusted cracking moment,
+          transformed cracked inertia, effective inertia and surface crack-width equation are shown for each direction.
+          Eq. 6-2 is an empirical beam/slab stiffness interpolation; the axial-load extension shown here is only a screening estimate for wall panels.
+        </Typography>
+      </Alert>
+      <CalculationSubsection title="Shared concrete material properties / 统一混凝土材料属性">
+        <CalculationFormula
+          caption="Concrete density / 混凝土质量密度"
+          formula={"\\rho=\\frac{\\gamma_c\\times1000}{g}=" + tx(mat.rhoConcrete, 0) + "\\,\\mathrm{kg/m^3}"}
+        />
+        <CalculationFormula
+          caption="Density factor / 密度修正系数（NZS 3101 Cl. 5.2.4 Eq. 5-3）"
+          formula={"\\lambda=\\min\\left(0.4+0.6\\frac{\\rho}{2200},1.0\\right)=" + tx(mat.lambdaConcrete, 3)}
+        />
+        <CalculationFormula
+          caption="Concrete modulus for short-term analysis / 短期混凝土弹性模量（NZS 3101 Cl. 5.2.3 Eq. 5-1）"
+          formula={"E_c=4700\\sqrt{f'_c}\\left(\\frac{\\rho}{2300}\\right)^{1.5}=" + fmt(mat.Ec, 0) + "\\,\\mathrm{MPa}"}
+        />
+        <CalculationFormula
+          caption="Serviceability modulus option / SLS 弹性模量选项（NZS 3101 Cl. 5.2.3(d), using f'c + 10 MPa）"
+          formula={"E_{c,SLS}=4700\\sqrt{f'_c+10}\\left(\\frac{\\rho}{2300}\\right)^{1.5}=" + fmt(mat.EcSls, 0) + "\\,\\mathrm{MPa}"}
+        />
+        <CalculationFormula
+          caption="Modulus of rupture / 抗折强度（NZS 3101 Cl. 5.2.5 Eq. 5-4）"
+          formula={"f_r=0.6\\lambda\\sqrt{f'_c}=0.6\\times" + tx(mat.lambdaConcrete, 3) + "\\times\\sqrt{" + tx(inputs.fc, 1) + "}=" + tx(mat.fr, 3) + "\\,\\mathrm{MPa}"}
+        />
+      </CalculationSubsection>
+      {renderDirection(ip, 'In-plane crack control / 平面内裂缝验算')}
+      {renderDirection(op, 'Out-of-plane crack control / 平面外裂缝验算')}
+      <Alert severity="warning" sx={{ mt: 1 }}>
+        {(cc.warnings || []).map((warning, index) => (
+          <Typography component="div" variant="body2" key={warning} sx={{ mb: 0.5 }}>
+            {index + 1}. {warning}
+          </Typography>
+        ))}
+      </Alert>
+    </CalculationSection>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   13. Utilisation Summary
+   --------------------------------------------------------------------------- */
+function UtilisationSummaryBlock({ inPlane, outOfPlane, connection, foundation, crackControl }) {
   const ip = inPlane || {};
   const op = outOfPlane || {};
   const cn = connection || {};
   const fd = foundation || {};
+  const cc = crackControl || {};
   const rows = [
     ["In-plane: Compression σmax,ser ≤ 0.6f'c", null, ip.checks?.stressCompressionPass],
     ['In-plane: Lintel bearing UR', ip.bearing?.bearingRatio, ip.checks?.bearingPass],
@@ -1358,11 +1496,13 @@ function UtilisationSummaryBlock({ inPlane, outOfPlane, connection, foundation }
     ['Connection: Development length', null, cn.checks?.developmentOK],
     ['In-plane footing: Bearing UR', fd.bearingRatio, fd.checks?.bearingPass],
     ['In-plane footing: Sliding UR', fd.slidingRatio, fd.checks?.slidingPass],
+    ['SLS crack width: In-plane', cc.inPlane?.crackWidthUtilisation, cc.inPlane?.checks?.pass],
+    ['SLS crack width: Out-of-plane', cc.outOfPlane?.crackWidthUtilisation, cc.outOfPlane?.checks?.pass],
     ['OOP slenderness h/t (warning)', null, !(ip.checks?.slendernessWarning)]
   ];
 
   return (
-    <CalculationSection number="12" title="Utilisation Summary · 利用率汇总" chip={<Chip size="small" label="UR ≤ 1.00" />}>
+    <CalculationSection number="13" title="Utilisation Summary · 利用率汇总" chip={<Chip size="small" label="UR ≤ 1.00" />}>
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">
           <TableHead>
@@ -1454,7 +1594,8 @@ function CalculationTab({ inputs, results }) {
       <LintelBoundaryElementBlock inputs={inputs} inPlane={ResultInPlane} />
       <BaseConnectionBlock inputs={inputs} connection={ResultConnection} />
       <FoundationBlock inputs={inputs} inPlane={ResultInPlane} outOfPlane={ResultOutOfPlane} foundation={ResultFoundation} />
-      <UtilisationSummaryBlock inPlane={ResultInPlane} outOfPlane={ResultOutOfPlane} connection={ResultConnection} foundation={ResultFoundation} />
+      <CrackControlBlock inputs={inputs} materials={results.materials} crackControl={results.crackControl} />
+      <UtilisationSummaryBlock inPlane={ResultInPlane} outOfPlane={ResultOutOfPlane} connection={ResultConnection} foundation={ResultFoundation} crackControl={results.crackControl} />
     </Box>
   );
 }
@@ -1474,6 +1615,9 @@ function ResultsTab({ inputs, results }) {
   const pd = outOfPlane.pDelta || {};
   const ps = outOfPlane.partSeismic || {};
   const oopSh = outOfPlane.oopShear || {};
+  const crackControl = results.crackControl || {};
+  const crackIP = crackControl.inPlane || {};
+  const crackOOP = crackControl.outOfPlane || {};
 
   return (
     <Box>
@@ -1497,6 +1641,28 @@ function ResultsTab({ inputs, results }) {
         <ResultRow label="Slenderness h/t" value={fmt(inPlane.slenderness?.outOfPlaneSlenderness, 2)} unit="" pass={!inPlane.checks?.slendernessWarning} warning={inPlane.checks?.slendernessWarning} />
         <ResultRow label="Section size OK" value={inPlane.checks?.sectionSizeOK ? 'PASS' : 'CHECK'} unit="" pass={inPlane.checks?.sectionSizeOK} />
         <ResultRow label="Min steel OK" value={inPlane.checks?.minSteelOK ? 'PASS' : 'CHECK'} unit="" pass={inPlane.checks?.minSteelOK} />
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>SLS Crack Control Summary</Typography>
+        <ResultRow label="Project crack width limit" value={fmt(crackControl.limit, 3)} unit="mm" />
+        <ResultRow label="In-plane Mcr (no axial adjustment)" value={fmt(crackIP.Mcr0, 2)} unit="kN·m" />
+        <ResultRow label="In-plane Mcr,N" value={fmt(crackIP.McrAxial, 2)} unit="kN·m" />
+        <ResultRow label="In-plane SLS N / M" value={fmt(crackIP.axialForce, 2) + " / " + fmt(crackIP.serviceMoment, 2)} unit="kN / kN·m" />
+        <ResultRow label="In-plane SLS actions confirmed" value={crackIP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'} pass={crackIP.checks?.actionConfirmed} />
+        <ResultRow label="In-plane Icr / Ie" value={fmt(crackIP.Icr, 0) + " / " + fmt(crackIP.Ie, 0)} unit="mm⁴" />
+        <ResultRow label="In-plane surface crack width" value={fmt(crackIP.crackWidth, 3)} unit="mm" pass={crackIP.checks?.pass} highlight />
+        <ResultRow label="In-plane crack utilisation" value={fmt(crackIP.crackWidthUtilisation, 3)} unit="UR" pass={crackIP.checks?.pass} />
+        <ResultRow label="OOP Mcr (no axial adjustment)" value={fmt(crackOOP.Mcr0, 2)} unit="kN·m/m" />
+        <ResultRow label="OOP Mcr,N" value={fmt(crackOOP.McrAxial, 2)} unit="kN·m/m" />
+        <ResultRow label="OOP SLS N / M" value={fmt(crackOOP.axialForce, 2) + " / " + fmt(crackOOP.serviceMoment, 2)} unit="kN/m / kN·m/m" />
+        <ResultRow label="OOP SLS actions confirmed" value={crackOOP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'} pass={crackOOP.checks?.actionConfirmed} />
+        <ResultRow label="OOP Icr / Ie" value={fmt(crackOOP.Icr, 0) + " / " + fmt(crackOOP.Ie, 0)} unit="mm⁴ (1 m strip)" />
+        <ResultRow label="OOP surface crack width" value={fmt(crackOOP.crackWidth, 3)} unit="mm" pass={crackOOP.checks?.pass} highlight />
+        <ResultRow label="OOP crack utilisation" value={fmt(crackOOP.crackWidthUtilisation, 3)} unit="UR" pass={crackOOP.checks?.pass} />
+        <Alert severity="warning" sx={{ mt: 1 }}>
+          These are flexural crack-width screening results. Confirm the governing SLS moments, project crack-width limit and shrinkage assumptions; automatic moments are not a full SLS load-combination envelope.
+        </Alert>
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
@@ -1630,7 +1796,7 @@ function ResultsTab({ inputs, results }) {
       </Accordion>
 
       <Alert severity="warning" sx={{ mt: 2, mb: 2 }}>
-        The UI displays results from the calculation engine (v0.8). Final design must be verified against applicable NZ Standards and project-specific requirements.
+        The UI displays results from the calculation engine (v0.9). Crack-width results require confirmed SLS actions and independent engineering review against the adopted NZ Standards.
       </Alert>
     </Box>
   );
@@ -1726,7 +1892,15 @@ export default function PrecastPanel() {
     footingWidth: safe(inputs.footingWidth),
     footingLength: safe(inputs.footingLength),
     footingThickness: safe(inputs.footingThickness),
-    allowableBearingPressure: safe(inputs.allowableBearingPressure, 150)
+    allowableBearingPressure: safe(inputs.allowableBearingPressure, 150),
+    crackWidthLimit: safe(inputs.crackWidthLimit, 0.30),
+    crackShrinkageSteelStress: safe(inputs.crackShrinkageSteelStress, 0),
+    crackSlsMomentInPlane: safe(inputs.crackSlsMomentInPlane, 0),
+    crackSlsMomentOutOfPlane: safe(inputs.crackSlsMomentOutOfPlane, 0),
+    crackWidthLimit: safe(inputs.crackWidthLimit, 0.30),
+    crackShrinkageSteelStress: safe(inputs.crackShrinkageSteelStress, 0),
+    crackSlsMomentInPlane: safe(inputs.crackSlsMomentInPlane, 0),
+    crackSlsMomentOutOfPlane: safe(inputs.crackSlsMomentOutOfPlane, 0)
   }), [inputs]);
 
   const results = useMemo(() => {
@@ -1766,7 +1940,7 @@ export default function PrecastPanel() {
                 Precast Concrete Slender Panel
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Unified In-Plane + Out-of-Plane + Connection + Foundation Design (v0.8)
+                Unified In-Plane + Out-of-Plane + SLS Crack Control + Connection + Foundation Design (v0.9)
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>

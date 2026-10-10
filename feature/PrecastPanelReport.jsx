@@ -152,6 +152,12 @@ export function getPrecastPanelInputRows(inputs) {
     ['Shear key', inputs.shearKey ? 'Yes' : 'No', ''],
     ['Friction coefficient μ', calcFmt(inputs.frictionCoefficient, 2), ''],
     ['ϕ connection', calcFmt(inputs.phiConnection, 2), ''],
+    ['Project crack-width limit', calcFmt(inputs.crackWidthLimit, 3), 'mm'],
+    ['Pre-cracking steel stress f_s,c', calcFmt(inputs.crackShrinkageSteelStress, 1), 'MPa'],
+    ['In-plane SLS moment override (0 = auto)', calcFmt(inputs.crackSlsMomentInPlane, 2), 'kN·m'],
+    ['OOP SLS moment override (0 = auto)', calcFmt(inputs.crackSlsMomentOutOfPlane, 2), 'kN·m/m'],
+    ['In-plane SLS axial override (blank = auto)', inputs.crackSlsAxialInPlane == null ? 'AUTO' : calcFmt(inputs.crackSlsAxialInPlane, 2), 'kN'],
+    ['OOP SLS axial override (blank = auto)', inputs.crackSlsAxialOutOfPlane == null ? 'AUTO' : calcFmt(inputs.crackSlsAxialOutOfPlane, 2), 'kN/m'],
     ['Footing B × L × t', `${calcFmt(inputs.footingWidth, 2)} × ${calcFmt(inputs.footingLength, 2)} × ${calcFmt(inputs.footingThickness, 2)}`, 'm'],
     ['Allowable bearing', calcFmt(inputs.allowableBearingPressure, 0), 'kPa']
   ];
@@ -165,6 +171,7 @@ export function getPrecastPanelSummaryRows(inputs, results) {
   const op = results.outOfPlane || {};
   const cn = results.connection || {};
   const fd = results.foundation || {};
+  const cc = results.crackControl || {};
   return [
     { param: 'In-plane V*', value: calcFmt(ip.sectionActions?.Vtotal, 2), unit: 'kN', status: null },
     { param: 'In-plane M*', value: calcFmt(ip.sectionActions?.Mtotal, 2), unit: 'kN·m', status: null },
@@ -186,7 +193,11 @@ export function getPrecastPanelSummaryRows(inputs, results) {
     { param: 'Connection uplift UR', value: calcFmt(safe(cn.ratios?.tensionRatio) * 100, 1), unit: '%', status: cn.checks?.tensionPass },
     { param: 'Connection grout bearing UR', value: calcFmt(safe(cn.ratios?.bearingRatio) * 100, 1), unit: '%', status: cn.checks?.bearingPass },
     { param: 'In-plane footing bearing UR', value: calcFmt(safe(fd.bearingRatio) * 100, 1), unit: '%', status: fd.checks?.bearingPass },
-    { param: 'In-plane footing sliding UR', value: calcFmt(safe(fd.slidingRatio) * 100, 1), unit: '%', status: fd.checks?.slidingPass }
+    { param: 'In-plane footing sliding UR', value: calcFmt(safe(fd.slidingRatio) * 100, 1), unit: '%', status: fd.checks?.slidingPass },
+    { param: 'SLS crack width — in-plane', value: calcFmt(cc.inPlane?.crackWidth, 3), unit: 'mm', status: cc.inPlane?.checks?.pass },
+    { param: 'SLS crack-width UR — in-plane', value: calcFmt(cc.inPlane?.crackWidthUtilisation, 3), unit: 'UR', status: cc.inPlane?.checks?.pass },
+    { param: 'SLS crack width — OOP', value: calcFmt(cc.outOfPlane?.crackWidth, 3), unit: 'mm', status: cc.outOfPlane?.checks?.pass },
+    { param: 'SLS crack-width UR — OOP', value: calcFmt(cc.outOfPlane?.crackWidthUtilisation, 3), unit: 'UR', status: cc.outOfPlane?.checks?.pass }
   ];
 }
 
@@ -223,6 +234,10 @@ export function getPrecastPanelFormulaSections(inputs, results) {
   const cap = cn.capacity || {};
   const cbe = cn.bearing || {};
   const rt = cn.ratios || {};
+  const crackControl = results.crackControl || {};
+  const crackMaterial = crackControl.materials || {};
+  const crackIP = crackControl.inPlane || {};
+  const crackOOP = crackControl.outOfPlane || {};
 
   const diaV = Math.max(safe(di.VdiaphragmWind), safe(di.VdiaphragmSeismic));
   const diaM = Math.max(safe(di.MdiaphragmWind), safe(di.MdiaphragmSeismic));
@@ -487,7 +502,56 @@ export function getPrecastPanelFormulaSections(inputs, results) {
       ]
     },
     {
-      title: '8. Utilisation Summary',
+      title: '8. SLS Crack Control · 裂缝验算',
+      steps: [
+        {
+          sub: 'Shared concrete material properties / 统一混凝土材料属性',
+          formulas: [
+            { caption: 'Concrete density and modulus / 混凝土密度及弹性模量', tex: `\\rho=${tx(crackMaterial.rhoConcrete, 0)}\\,\\mathrm{kg/m^3},\\quad E_c=4700\\sqrt{f'_c}(\\rho/2300)^{1.5}=${tx(crackMaterial.Ec, 0)}\\,\\mathrm{MPa}` },
+            { caption: 'SLS modulus option and modulus of rupture / SLS 弹性模量与抗折强度', tex: `E_{c,SLS}=${tx(crackMaterial.EcSls, 0)}\\,\\mathrm{MPa},\\quad f_r=0.6\\lambda\\sqrt{f'_c}=${tx(crackMaterial.fr, 3)}\\,\\mathrm{MPa}` },
+            { caption: 'Project crack-width criterion / 项目裂缝限值', tex: `w_{lim}=${tx(crackControl.limit, 3)}\\,\\mathrm{mm},\\quad f_{s,c}=${tx(crackControl.shrinkageSteelStress, 1)}\\,\\mathrm{MPa}` }
+          ]
+        },
+        {
+          sub: 'In-plane flexural crack control / 平面内弯曲裂缝',
+          formulas: [
+            { caption: 'Gross section area and tension face / 毛截面面积与受拉边', tex: `A_g=bh=${tx(crackIP.Ag, 0)}\\,\\mathrm{mm^2},\\quad y_t=h/2=${tx(crackIP.yt, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Gross inertia / 毛截面惯性矩', tex: `I_g=bh^3/12=${tx(crackIP.Ig, 0)}\\,\\mathrm{mm^4}` },
+            { caption: 'Gross section modulus / 毛截面抵抗矩', tex: `Z_g=I_g/y_t=${tx(crackIP.Zg, 0)}\\,\\mathrm{mm^3}` },
+            { caption: 'Gross-section cracking moment / 毛截面开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackIP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m}` },
+            { caption: 'Axial-adjusted cracking moment / 轴力修正开裂弯矩', tex: `M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackIP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m}` },
+            { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `I_{cr}=${tx(crackIP.Icr, 0)}\\,\\mathrm{mm^4}` },
+            { caption: 'Effective inertia ratio / 有效惯性矩系数', tex: `r=\\operatorname{clamp}(\\max(M_{cr,N},0)/M_a,0,1)=${tx(crackIP.inertiaRatio, 3)}` },
+            { caption: 'Effective inertia / 有效惯性矩', tex: `I_e=r^3I_g+(1-r^3)I_{cr}\\le I_g=${tx(crackIP.Ie, 0)}\\,\\mathrm{mm^4}` },
+            { caption: 'Shrinkage-corrected steel stress / 收缩修正钢筋应力', tex: `f_{s,ch}=\\max(f_s-0.5f_{s,c},0)=${tx(crackIP.fsChange, 1)}\\,\\mathrm{MPa}` },
+            { caption: 'Crack-width geometry factors / 裂缝几何系数', tex: `\\beta'=(h-kd)/(d-kd)=${tx(crackIP.betaPrime, 3)},\\quad g_s=\\sqrt{(s/2)^2+c_m^2}=${tx(crackIP.gs, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Calculated surface crack width / 计算表面裂缝宽度', tex: `w=2.0\\beta'f_{s,ch}g_s/E_s=${tx(crackIP.crackWidth, 3)}\\,\\mathrm{mm},\\quad UR_w=${txUR(crackIP.crackWidthUtilisation)}\\;\\Rightarrow\\;\\text{${crackIP.checks?.status || 'NOT VERIFIED'}}` },
+            { caption: 'SLS action values / SLS 作用', tex: `N_{SLS}=${tx(crackIP.axialForce, 2)}\\,\\mathrm{kN},\\quad M_{SLS}=${tx(crackIP.serviceMoment, 2)}\\,\\mathrm{kN\\cdot m}` },
+            { caption: 'SLS action status / SLS 作用状态', tex: `\\text{${crackIP.momentInputConfirmed ? 'User-confirmed SLS actions' : 'Screening estimates — verify SLS N and M'}}` }
+          ]
+        },
+        {
+          sub: 'Out-of-plane flexural crack control / 平面外弯曲裂缝',
+          formulas: [
+            { caption: 'Gross section area and tension face / 毛截面面积与受拉边 (1 m strip)', tex: `A_g=bh=${tx(crackOOP.Ag, 0)}\\,\\mathrm{mm^2/m},\\quad y_t=h/2=${tx(crackOOP.yt, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Gross inertia / 毛截面惯性矩', tex: `I_g=bh^3/12=${tx(crackOOP.Ig, 0)}\\,\\mathrm{mm^4/m}` },
+            { caption: 'Gross section modulus / 毛截面抵抗矩', tex: `Z_g=I_g/y_t=${tx(crackOOP.Zg, 0)}\\,\\mathrm{mm^3/m}` },
+            { caption: 'Gross-section cracking moment / 毛截面开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackOOP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m/m}` },
+            { caption: 'Axial-adjusted cracking moment / 轴力修正开裂弯矩', tex: `M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackOOP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m/m}` },
+            { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `I_{cr}=${tx(crackOOP.Icr, 0)}\\,\\mathrm{mm^4/m}` },
+            { caption: 'Effective inertia ratio / 有效惯性矩系数', tex: `r=\\operatorname{clamp}(\\max(M_{cr,N},0)/M_a,0,1)=${tx(crackOOP.inertiaRatio, 3)}` },
+            { caption: 'Effective inertia / 有效惯性矩 (screening estimate)', tex: `I_e=r^3I_g+(1-r^3)I_{cr}\\le I_g=${tx(crackOOP.Ie, 0)}\\,\\mathrm{mm^4/m}` },
+            { caption: 'Shrinkage-corrected steel stress / 收缩修正钢筋应力', tex: `f_{s,ch}=${tx(crackOOP.fsChange, 1)}\\,\\mathrm{MPa}` },
+            { caption: 'Crack-width geometry factors / 裂缝几何系数', tex: `\\beta'=(h-kd)/(d-kd)=${tx(crackOOP.betaPrime, 3)},\\quad g_s=\\sqrt{(s/2)^2+c_m^2}=${tx(crackOOP.gs, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Calculated surface crack width / 计算表面裂缝宽度', tex: `w=2.0\\beta'f_{s,ch}g_s/E_s=${tx(crackOOP.crackWidth, 3)}\\,\\mathrm{mm},\\quad UR_w=${txUR(crackOOP.crackWidthUtilisation)}\\;\\Rightarrow\\;\\text{${crackOOP.checks?.status || 'NOT VERIFIED'}}` },
+            { caption: 'SLS action values / SLS 作用', tex: `N_{SLS}=${tx(crackOOP.axialForce, 2)}\\,\\mathrm{kN/m},\\quad M_{SLS}=${tx(crackOOP.serviceMoment, 2)}\\,\\mathrm{kN\\cdot m/m}` },
+            { caption: 'SLS action status / SLS 作用状态', tex: `\\text{${crackOOP.momentInputConfirmed ? 'User-confirmed SLS actions' : 'Screening estimates — verify SLS N and M'}}` }
+          ]
+        }
+      ]
+    },
+    {
+      title: '9. Utilisation Summary',
       steps: [
         {
           sub: 'Implemented checks (UR ≤ 1.00)',
@@ -518,6 +582,10 @@ export function getPrecastPanelDetailSections(inputs, results) {
   const op = results.outOfPlane || {};
   const cn = results.connection || {};
   const fd = results.foundation || {};
+  const crackControl = results.crackControl || {};
+  const crackMaterial = crackControl.materials || {};
+  const crackIP = crackControl.inPlane || {};
+  const crackOOP = crackControl.outOfPlane || {};
 
   const geo = ip.geometry || {};
   const g = ip.gravity || {};
@@ -923,7 +991,56 @@ export function getPrecastPanelDetailSections(inputs, results) {
           ]
         }
       ]
-    }
+    },
+    {
+      title: '8. SLS Crack Control · 裂缝验算',
+      steps: [
+        {
+          sub: '8.1 Shared concrete material properties / 统一混凝土材料属性',
+          formulas: [
+            { caption: 'Density and density factor / 密度及密度系数', tex: `\\rho=${tx(crackMaterial.rhoConcrete, 0)}\\,\\mathrm{kg/m^3},\\quad \\lambda=${tx(crackMaterial.lambdaConcrete, 3)}` },
+            { caption: 'Concrete moduli and modulus of rupture / 混凝土弹性模量与抗折强度', tex: `E_c=4700\\sqrt{f'_c}(\\rho/2300)^{1.5}=${tx(crackMaterial.Ec, 0)}\\,\\mathrm{MPa},\\quad E_{c,SLS}=${tx(crackMaterial.EcSls, 0)}\\,\\mathrm{MPa}` },
+            { caption: 'Modulus of rupture / 抗折强度', tex: `f_r=0.6\\lambda\\sqrt{f'_c}=${tx(crackMaterial.fr, 3)}\\,\\mathrm{MPa},\\quad w_{lim}=${tx(crackControl.limit, 3)}\\,\\mathrm{mm}` }
+          ]
+        },
+        {
+          sub: '8.2 In-plane flexural crack control / 平面内裂缝验算',
+          formulas: [
+            { caption: 'Gross section properties / 毛截面特性', tex: `A_g=bh=${tx(crackIP.Ag, 0)}\\,\\mathrm{mm^2},\\quad I_g=bh^3/12=${tx(crackIP.Ig, 0)}\\,\\mathrm{mm^4},\\quad y_t=h/2=${tx(crackIP.yt, 1)}\\,\\mathrm{mm},\\quad Z_g=I_g/y_t=${tx(crackIP.Zg, 0)}\\,\\mathrm{mm^3}` },
+            { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackIP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackIP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m}` },
+            { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `n=E_s/E_{c,SLS}=${tx(crackMaterial.Es / Math.max(crackMaterial.EcSls, 1), 3)},\\quad I_{cr}=I_{tr,0}-S_{tr}^2/A_{tr}=${tx(crackIP.Icr, 0)}\\,\\mathrm{mm^4}` },
+            { caption: 'Effective inertia ratio / 有效惯性矩系数', tex: `r=\\operatorname{clamp}(\\max(M_{cr,N},0)/M_a,0,1)=${tx(crackIP.inertiaRatio, 3)}` },
+            { caption: 'Effective inertia / 有效惯性矩', tex: `I_e=r^3I_g+(1-r^3)I_{cr}\\le I_g=${tx(crackIP.Ie, 0)}\\,\\mathrm{mm^4}` },
+            { caption: 'Shrinkage-corrected steel stress / 收缩修正钢筋应力', tex: `f_{s,ch}=\\max(f_s-0.5f_{s,c},0)=${tx(crackIP.fsChange, 1)}\\,\\mathrm{MPa}` },
+            { caption: 'Crack-width geometry factors / 裂缝几何系数', tex: `\\beta'=(h-kd)/(d-kd)=${tx(crackIP.betaPrime, 3)},\\quad g_s=\\sqrt{(s/2)^2+c_m^2}=${tx(crackIP.gs, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Crack width / 裂缝宽度 (NZS 3101 Cl. 2.4.4.6 Eqs. 2-7 to 2-9)', tex: `w=2.0\\beta'f_{s,ch}g_s/E_s=${tx(crackIP.crackWidth, 3)}\\,\\mathrm{mm},\\quad UR_w=${txUR(crackIP.crackWidthUtilisation)}\\;\\Rightarrow\\;\\text{${crackIP.checks?.status || 'NOT VERIFIED'}}` },
+            { caption: 'SLS actions / SLS 作用', tex: `N_{SLS}=${tx(crackIP.axialForce, 2)}\\,\\mathrm{kN},\\quad M_{SLS}=${tx(crackIP.serviceMoment, 2)}\\,\\mathrm{kN\\cdot m}` }
+          ]
+        },
+        {
+          sub: '8.3 Out-of-plane flexural crack control / 平面外裂缝验算',
+          formulas: [
+            { caption: 'Gross section properties / 毛截面特性 (1 m strip)', tex: `A_g=bh=${tx(crackOOP.Ag, 0)}\\,\\mathrm{mm^2},\\quad I_g=bh^3/12=${tx(crackOOP.Ig, 0)}\\,\\mathrm{mm^4/m},\\quad y_t=h/2=${tx(crackOOP.yt, 1)}\\,\\mathrm{mm},\\quad Z_g=I_g/y_t=${tx(crackOOP.Zg, 0)}\\,\\mathrm{mm^3/m}` },
+            { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackOOP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m/m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackOOP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m/m}` },
+            { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `n=E_s/E_{c,SLS}=${tx(crackMaterial.Es / Math.max(crackMaterial.EcSls, 1), 3)},\\quad I_{cr}=${tx(crackOOP.Icr, 0)}\\,\\mathrm{mm^4/m}` },
+            { caption: 'Effective inertia ratio / 有效惯性矩系数', tex: `r=\\operatorname{clamp}(\\max(M_{cr,N},0)/M_a,0,1)=${tx(crackOOP.inertiaRatio, 3)}` },
+            { caption: 'Effective inertia / 有效惯性矩 (screening estimate)', tex: `I_e=r^3I_g+(1-r^3)I_{cr}\\le I_g=${tx(crackOOP.Ie, 0)}\\,\\mathrm{mm^4/m}` },
+            { caption: 'Shrinkage-corrected steel stress / 收缩修正钢筋应力', tex: `f_{s,ch}=\\max(f_s-0.5f_{s,c},0)=${tx(crackOOP.fsChange, 1)}\\,\\mathrm{MPa}` },
+            { caption: 'Crack-width geometry factors / 裂缝几何系数', tex: `\\beta'=(h-kd)/(d-kd)=${tx(crackOOP.betaPrime, 3)},\\quad g_s=\\sqrt{(s/2)^2+c_m^2}=${tx(crackOOP.gs, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Crack width / 裂缝宽度 (NZS 3101 Cl. 2.4.4.6 Eqs. 2-7 to 2-9)', tex: `w=2.0\\beta'f_{s,ch}g_s/E_s=${tx(crackOOP.crackWidth, 3)}\\,\\mathrm{mm},\\quad UR_w=${txUR(crackOOP.crackWidthUtilisation)}\\;\\Rightarrow\\;\\text{${crackOOP.checks?.status || 'NOT VERIFIED'}}` },
+            { caption: 'SLS actions / SLS 作用', tex: `N_{SLS}=${tx(crackOOP.axialForce, 2)}\\,\\mathrm{kN/m},\\quad M_{SLS}=${tx(crackOOP.serviceMoment, 2)}\\,\\mathrm{kN\\cdot m/m}` }
+          ]
+        },
+        {
+          sub: '8.4 Method limits / 方法适用范围',
+          formulas: [
+            { caption: 'Action confirmation / 作用确认', tex: `\\text{In-plane action confirmed: ${crackIP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'}; OOP action confirmed: ${crackOOP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'}}` },
+            { caption: 'Effective inertia and scope / 有效惯性矩及适用性', tex: `\\text{NZS 3101 Cl. 6.8.3 Eq. 6-2 is a beam/slab interpolation; the axial-load adaptation for wall panels is a screening estimate.}` },
+            { caption: 'Acceptance assumptions / 验收假定', tex: `\\text{Cl. 2.4.4.1: prescribed crack-control SLS combinations exclude wind/seismic. Confirm the project limit and f_{s,c}; lateral-action crack checks are supplemental.}` }
+          ]
+        }
+      ]
+    },
   ];
 }
 
@@ -937,6 +1054,7 @@ export function getPrecastPanelUtilisationRows(results) {
   const op = results.outOfPlane || {};
   const cn = results.connection || {};
   const fd = results.foundation || {};
+  const cc = results.crackControl || {};
   return [
     ["In-plane: Compression stress σmax ≤ 0.6f'c", null, ip.checks?.stressCompressionPass],
     ['In-plane: Lintel bearing', ip.bearing?.bearingRatio, ip.checks?.bearingPass],
@@ -956,6 +1074,10 @@ export function getPrecastPanelUtilisationRows(results) {
     ['Connection: Grout bearing', cn.ratios?.bearingRatio, cn.checks?.bearingPass],
     ['In-plane footing: Bearing', fd.bearingRatio, fd.checks?.bearingPass],
     ['In-plane footing: Sliding', fd.slidingRatio, fd.checks?.slidingPass],
+    ['SLS crack width: in-plane', cc.inPlane?.crackWidth, cc.inPlane?.checks?.pass],
+    ['SLS crack-width UR: in-plane', cc.inPlane?.crackWidthUtilisation, cc.inPlane?.checks?.pass],
+    ['SLS crack width: out-of-plane', cc.outOfPlane?.crackWidth, cc.outOfPlane?.checks?.pass],
+    ['SLS crack-width UR: out-of-plane', cc.outOfPlane?.crackWidthUtilisation, cc.outOfPlane?.checks?.pass],
     ['OOP slenderness h/t (warning item)', null, !(ip.checks?.slendernessWarning)]
   ];
 }
@@ -1495,7 +1617,7 @@ export function PrecastPanelDetailPrintReport({ inputs, results }) {
 
         {/* ---------------- 利用率汇总（Section 8） ---------------- */}
         <div className="report-section">
-          <h4>8. Utilisation Summary · 利用率汇总</h4>
+          <h4>9. Utilisation Summary · 利用率汇总</h4>
           <table className="report-table compact-table">
             <thead>
               <tr>

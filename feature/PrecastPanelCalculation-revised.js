@@ -14,6 +14,41 @@ const kNToN = (value) => finite(value) * 1000;
 const kNmToNmm = (value) => finite(value) * 1e6;
 const max0 = (value) => Math.max(0, finite(value));
 
+
+/* ============================================================================
+SHARED CONCRETE MATERIAL PROPERTIES
+NZS 3101.1:2006 incl. A1/A2/A3, Clauses 5.2.3–5.2.5.
+Ec uses Eq. 5-1; EcSls uses the permitted fc' + 10 MPa option in 5.2.3(d).
+The density is estimated from the entered unit weight and g = 9.81 m/s².
+=========================================================================== */
+export function calculateConcreteMaterialProperties(input = {}) {
+    const fc = positive(input.fc);
+    const concreteDensity = positive(input.concreteDensity, 24);
+    const rhoConcrete = concreteDensity * 1000 / 9.81;
+    const densityInRange = rhoConcrete >= 1800 && rhoConcrete <= 2800;
+    const lambdaConcrete = Math.min(0.4 + 0.6 * rhoConcrete / 2200, 1.0);
+    const Ec = 4700 * Math.sqrt(fc) * Math.pow(rhoConcrete / 2300, 1.5);
+    const EcSls = 4700 * Math.sqrt(fc + 10) * Math.pow(rhoConcrete / 2300, 1.5);
+    const Es = positive(input.Es, 200000);
+    const fr = 0.6 * lambdaConcrete * Math.sqrt(fc);
+
+    return {
+        fc,
+        concreteDensity,
+        rhoConcrete,
+        densityInRange,
+        lambdaConcrete,
+        Ec,
+        EcSls,
+        Es,
+        fr,
+        codeReferences: {
+            modulusOfElasticity: 'NZS 3101.1:2006 incl. A1/A2/A3, Cl. 5.2.3, Eq. 5-1',
+            modulusOfRupture: 'NZS 3101.1:2006 incl. A1/A2/A3, Cl. 5.2.4–5.2.5, Eqs. 5-3 and 5-4'
+        }
+    };
+}
+
 /* ============================================================================
 STATUS
 =========================================================================== */
@@ -1000,8 +1035,9 @@ export function calculateOutOfPlaneDesign(input = {}) {
     const Es = positive(input.Es, 200000);
     /* NZS 3101:2006 Cl 5.2.3：Ec = (3320√f'c + 6900)(ρ/2300)^1.5 MPa。
        γc [kN/m³] 换算质量密度 ρ ≈ γc×1000/9.81 [kg/m³]。 */
-    const rhoConcrete = gammaConcrete * 1000 / 9.81;
-    const Ec = (3320 * Math.sqrt(Math.max(fc, 0)) + 6900) * Math.pow(rhoConcrete / 2300, 1.5);
+    const material = calculateConcreteMaterialProperties(input);
+    const rhoConcrete = material.rhoConcrete;
+    const Ec = material.Ec;
     const n = Ec > 0 ? Es / Ec : 0;
 
     /* Unified reinforcement */
@@ -1602,6 +1638,706 @@ export function calculateOutOfPlaneDesign(input = {}) {
     };
 }
 
+
+
+/* ============================================================================
+SLS FLEXURAL CRACK CONTROL — IN-PLANE AND OUT-OF-PLANE
+Basis:
+- NZS 3101.1:2006 incl. A1/A2/A3, Cl. 2.4.4.6, Eqs. 2-7 to 2-9:
+  w = 2.0 beta' fs,ch gs / Es; fs,ch = max(fs - 0.5 fs,c, 0);
+  beta' = (y - kd)/(d - kd); gs = sqrt((s/2)^2 + cm^2).
+- NZS 3101.1 Cl. 6.8.3, Eqs. 6-2 and 6-2a:
+  Mcr = fr Ig/yt; Ie = (Mcr/Ma)^3 Ig + [1-(Mcr/Ma)^3] Icr <= Ig.
+The effective-inertia interpolation is empirical for beams/slabs not subjected to
+significant axial load. For slender wall panels with axial load this module is a
+screening estimate; use a rational cracked-section/stability analysis where the
+scope limits or wall behaviour demand it. The axial-load adjustment to Mcr and
+the strain-compatible bar-stress solution below are explicitly reported.
+=========================================================================== */
+
+/**
+ * Solve a linear-elastic transformed cracked section for specified axial force
+ * and moment. Compression is positive; the compression face is at z = 0.
+ * Tension concrete is neglected. The neutral axis is found by enforcing that
+ * the transformed-section strain is zero at z = kd.
+ *
+ * Units: breadth/depth/z in mm, N in kN, M in kN.m, stresses in MPa.
+ */
+function solveCrackedSection({ breadth, depth, bars, N = 0, M = 1, Es, Ec }) {
+    const b = positive(breadth);
+    const h = positive(depth);
+    const steelModulus = positive(Es);
+    const concreteModulus = positive(Ec);
+    const n = concreteModulus > 0 ? steelModulus / concreteModulus : 0;
+    const normalizedBars = (bars || [])
+        .map((bar) => ({
+            z: clamp(bar.z, 0, h),
+            As: positive(bar.As),
+            diameter: positive(bar.diameter),
+            type: bar.type || 'reinforcement'
+        }))
+        .filter((bar) => bar.As > 0);
+
+    if (
+        b <= 0 ||
+        h <= 0 ||
+        steelModulus <= 0 ||
+        concreteModulus <= 0 ||
+        n <= 1 ||
+        normalizedBars.length === 0 ||
+        !Number.isFinite(Number(N)) ||
+        !Number.isFinite(Number(M))
+    ) {
+        return { valid: false, reason: 'Invalid geometry, material or reinforcement.' };
+    }
+
+    const axialN = finite(N) * 1000;
+    const momentNmm = Math.abs(finite(M)) * 1e6;
+    const rhsN = axialN / concreteModulus;
+    const rhsM = momentNmm / concreteModulus;
+
+    const evaluateAtKd = (kd) => {
+        const k = clamp(kd, h * 1e-6, h * (1 - 1e-6));
+        const concreteArea = b * k;
+        const concreteY = h / 2 - k / 2;
+
+        let area = concreteArea;
+        let firstMoment = concreteArea * concreteY;
+        let secondMomentOrigin = b * Math.pow(k, 3) / 12 + concreteArea * concreteY * concreteY;
+
+        normalizedBars.forEach((bar) => {
+            const y = h / 2 - bar.z;
+            // Compression bars replace concrete already in the compression block:
+            // use (n-1)As there and nAs for bars in the cracked tensile zone.
+            const transformedArea = (bar.z <= k ? Math.max(n - 1, 0) : n) * bar.As;
+            area += transformedArea;
+            firstMoment += transformedArea * y;
+            secondMomentOrigin += transformedArea * y * y;
+        });
+
+        const determinant = area * secondMomentOrigin - firstMoment * firstMoment;
+        if (!(area > 0) || !(determinant > 1e-12) || !Number.isFinite(determinant)) {
+            return { valid: false, kd: k, residual: NaN };
+        }
+
+        // [A  S][eps0] = [N/Ec]
+        // [S  I][kappa]   [M/Ec]
+        const eps0 = (rhsN * secondMomentOrigin - rhsM * firstMoment) / determinant;
+        const curvature = (area * rhsM - firstMoment * rhsN) / determinant;
+        if (!Number.isFinite(eps0) || !Number.isFinite(curvature) || Math.abs(curvature) < 1e-18) {
+            return { valid: false, kd: k, residual: NaN };
+        }
+
+        const neutralAxisDepth = h / 2 + eps0 / curvature;
+        const residual = neutralAxisDepth - k;
+        const inertiaCentroid = secondMomentOrigin - firstMoment * firstMoment / area;
+        const barStresses = normalizedBars.map((bar) => {
+            const y = h / 2 - bar.z;
+            const strain = eps0 + curvature * y;
+            const stress = steelModulus * strain; // positive = compression
+            return {
+                ...bar,
+                strain,
+                stress,
+                tensionStress: Math.max(-stress, 0)
+            };
+        });
+
+        return {
+            valid: Number.isFinite(residual) && inertiaCentroid > 0,
+            kd: k,
+            residual,
+            eps0,
+            curvature,
+            areaTransformed: area,
+            transformedCentroidY: firstMoment / area,
+            Icr: inertiaCentroid,
+            barStresses
+        };
+    };
+
+    // Scan first, because axial force and asymmetrical reinforcement can shift
+    // the neutral axis substantially from its pure-bending location.
+    const samples = 120;
+    const roots = [];
+    let prev = null;
+    for (let i = 0; i <= samples; i++) {
+        const kd = h * (0.005 + 0.99 * i / samples);
+        const current = evaluateAtKd(kd);
+        if (!current.valid) {
+            prev = null;
+            continue;
+        }
+        if (Math.abs(current.residual) <= 1e-7) {
+            roots.push({ lo: kd, hi: kd, flo: current.residual });
+        } else if (prev && prev.valid && prev.residual * current.residual < 0) {
+            roots.push({
+                lo: prev.kd,
+                hi: current.kd,
+                flo: prev.residual
+            });
+        }
+        prev = current;
+    }
+
+    if (roots.length === 0) {
+        return {
+            valid: false,
+            reason: 'No cracked-section neutral-axis equilibrium root was found; use a rational section analysis.',
+            N: finite(N),
+            M: Math.abs(finite(M)),
+            bars: normalizedBars
+        };
+    }
+
+    // Prefer a physically conventional first root. In typical singly reinforced
+    // flexural walls this lies between 0.1h and 0.6h; the residual is checked below.
+    roots.sort((a, b2) =>
+        Math.abs((a.lo + a.hi) / 2 - 0.35 * h) -
+        Math.abs((b2.lo + b2.hi) / 2 - 0.35 * h)
+    );
+    let bracket = roots[0];
+    let result;
+
+    if (bracket.lo === bracket.hi) {
+        result = evaluateAtKd(bracket.lo);
+    } else {
+        let lo = bracket.lo;
+        let hi = bracket.hi;
+        let flo = bracket.flo;
+        result = null;
+        for (let i = 0; i < 100; i++) {
+            const mid = (lo + hi) / 2;
+            const atMid = evaluateAtKd(mid);
+            if (!atMid.valid) break;
+            result = atMid;
+            if (Math.abs(atMid.residual) <= 1e-6 || hi - lo <= 1e-5) break;
+            if (flo * atMid.residual <= 0) {
+                hi = mid;
+            } else {
+                lo = mid;
+                flo = atMid.residual;
+            }
+        }
+    }
+
+    if (
+        !result ||
+        !result.valid ||
+        Math.abs(result.residual) > Math.max(0.05, h * 1e-4) ||
+        !Number.isFinite(result.Icr) ||
+        result.Icr <= 0
+    ) {
+        return { valid: false, reason: 'Cracked-section neutral-axis solution did not converge.' };
+    }
+
+    const tensileBars = result.barStresses
+        .filter((bar) => bar.tensionStress > 0 && bar.z > result.kd)
+        .sort((a, b2) => a.z - b2.z);
+    const tensionArea = tensileBars.reduce((sum, bar) => sum + bar.As, 0);
+    const tensionCentroid = tensionArea > 0
+        ? tensileBars.reduce((sum, bar) => sum + bar.As * bar.z, 0) / tensionArea
+        : NaN;
+    const maxTensionBarStress = result.barStresses.reduce(
+        (maxStress, bar) => Math.max(maxStress, bar.tensionStress),
+        0
+    );
+
+    return {
+        ...result,
+        valid: result.valid && tensileBars.length > 0 && Number.isFinite(tensionCentroid),
+        tensileBars,
+        tensionArea,
+        tensionCentroid,
+        maxTensionBarStress,
+        n,
+        axialForce: finite(N),
+        momentMagnitude: Math.abs(finite(M))
+    };
+}
+
+function calculateFlexuralCrackDirection({
+    label,
+    breadth,
+    depth,
+    bars,
+    nominalSpacing,
+    cover,
+    barDiameter,
+    fc,
+    fr,
+    Es,
+    Ec,
+    axialForce,
+    moment,
+    crackWidthLimit,
+    shrinkageSteelStress,
+    normalizedAxialLoadRatio,
+    momentSource,
+    axialSource,
+    momentInputConfirmed,
+    steelYieldStrength,
+    direction
+}) {
+    const b = positive(breadth);
+    const h = positive(depth);
+    const Ag = b * h;
+    const Ig = b * Math.pow(h, 3) / 12;
+    const yt = h / 2;
+    const Zg = yt > 0 ? Ig / yt : 0;
+    const N = finite(axialForce);
+    const M = Math.abs(finite(moment));
+    const fy = positive(steelYieldStrength);
+    const sigmaN = Ag > 0 ? N * 1000 / Ag : 0;
+    const Mcr0 = Zg > 0 ? fr * Zg / 1e6 : Infinity;
+    // Axial force adjustment derived from the gross-section edge-stress condition:
+    // Mcr,N*yt/Ig - N/Ag = fr, compression-positive.
+    const McrAxial = Zg > 0 ? (fr + sigmaN) * Zg / 1e6 : Infinity;
+    const grossTensionStress = Zg > 0 ? M * 1e6 / Zg - sigmaN : Infinity;
+    const axialCracking = sigmaN < -fr;
+    const flexuralCracking = grossTensionStress > fr + 1e-9;
+    const cracked = axialCracking || flexuralCracking;
+
+    const common = {
+        label,
+        breadth: b,
+        depth: h,
+        Ag,
+        Ig,
+        Zg,
+        yt,
+        axialForce: N,
+        serviceMoment: M,
+        sigmaN,
+        fr,
+        Mcr0,
+        McrAxial,
+        grossTensionStress,
+        axialCracking,
+        flexuralCracking,
+        cracked,
+        normalizedAxialLoadRatio,
+        // NZS 3101 Cl. 6.8.3 describes Ie for beams/slabs without significant axial load.
+        // Keep the wall-panel Ie result explicitly screening-only; do not impose an
+        // unsupported numerical axial-load cutoff on the Cl. 2.4.4.6 crack-width check.
+        momentSource,
+        axialSource,
+        momentInputConfirmed,
+        steelYieldStrength: fy,
+        limit: crackWidthLimit,
+        codeReferences: {
+            crackWidth: 'NZS 3101.1:2006 incl. A1/A2/A3, Cl. 2.4.4.6, Eqs. 2-7 to 2-9',
+            effectiveInertia: 'NZS 3101.1:2006 incl. A1/A2/A3, Cl. 6.8.3, Eqs. 6-2 and 6-2a'
+        }
+    };
+
+    if (
+        b <= 0 ||
+        h <= 0 ||
+        Ag <= 0 ||
+        Ig <= 0 ||
+        !(fr > 0) ||
+        !(Es > 0) ||
+        !(Ec > 0) ||
+        !(fy > 0) ||
+        !Array.isArray(bars) ||
+        bars.length === 0 ||
+        !Number.isFinite(N) ||
+        !Number.isFinite(M)
+    ) {
+        return {
+            ...common,
+            valid: false,
+            reason: 'Invalid section geometry, material properties, service actions or reinforcement.',
+            Icr: NaN,
+            Ie: NaN,
+            crackWidth: Infinity,
+            crackWidthUtilisation: Infinity,
+            checks: { numericalPass: false, methodApplicable: false, actionConfirmed: false, pass: false, status: 'NOT VERIFIED' }
+        };
+    }
+
+    const normalizedBars = bars.map((bar) => ({
+        z: clamp(bar.z, 0, h),
+        As: positive(bar.As),
+        diameter: positive(bar.diameter, barDiameter),
+        type: bar.type || 'reinforcement'
+    })).filter((bar) => bar.As > 0);
+
+    if (normalizedBars.length === 0) {
+        return {
+            ...common,
+            valid: false,
+            reason: 'No effective reinforcement was available for the crack-width calculation.',
+            Icr: NaN,
+            Ie: NaN,
+            crackWidth: Infinity,
+            crackWidthUtilisation: Infinity,
+            checks: { numericalPass: false, methodApplicable: false, actionConfirmed: false, pass: false, status: 'NOT VERIFIED' }
+        };
+    }
+
+    // Icr is calculated from the transformed cracked section in pure bending.
+    // A large reference moment is used only to establish the linear-elastic NA.
+    const pureBending = solveCrackedSection({
+        breadth: b,
+        depth: h,
+        bars: normalizedBars,
+        N: 0,
+        M: 1000,
+        Es,
+        Ec
+    });
+    const Icr = pureBending.valid ? pureBending.Icr : NaN;
+    let Ie = Ig;
+    let inertiaRatio = 1;
+    if (cracked) {
+        if (Number.isFinite(Icr) && Icr > 0) {
+            inertiaRatio = M > 1e-9 ? clamp(Math.max(McrAxial, 0) / M, 0, 1) : 0;
+            const r3 = Math.pow(inertiaRatio, 3);
+            Ie = Math.min(Ig, Math.max(Icr, r3 * Ig + (1 - r3) * Icr));
+        } else {
+            Ie = NaN;
+        }
+    }
+
+    let serviceSection = null;
+    if (cracked && M > 1e-9) {
+        serviceSection = solveCrackedSection({
+            breadth: b,
+            depth: h,
+            bars: normalizedBars,
+            N,
+            M,
+            Es,
+            Ec
+        });
+    }
+
+    const valid = Number.isFinite(Icr) && Icr > 0 &&
+        Number.isFinite(Ie) && Ie > 0 &&
+        (!cracked || (serviceSection?.valid === true));
+    let kd = cracked ? serviceSection?.kd : (pureBending.valid ? pureBending.kd : NaN);
+    let fs = cracked ? serviceSection?.maxTensionBarStress : 0;
+    let d = cracked ? serviceSection?.tensionCentroid : NaN;
+    let betaPrime = 0;
+    let cm = NaN;
+    let spacing = positive(nominalSpacing);
+    let gs = NaN;
+    let fsChange = 0;
+    let crackWidth = 0;
+
+    if (cracked && valid) {
+        const tensileBars = serviceSection.tensileBars || [];
+        const positions = [...new Set(tensileBars.map((bar) => Math.round(bar.z * 1000) / 1000))].sort((a, b2) => a - b2);
+        const gaps = positions.slice(1).map((z, i) => z - positions[i]).filter((s) => s > 0);
+        const maxActualGap = gaps.length ? Math.max(...gaps) : 0;
+        spacing = Math.max(spacing, maxActualGap);
+        const outermostTensionBar = tensileBars.reduce(
+            (outermost, bar) => !outermost || bar.z > outermost.z ? bar : outermost,
+            null
+        );
+        cm = outermostTensionBar
+            ? Math.max(h - outermostTensionBar.z, outermostTensionBar.diameter / 2)
+            : Math.max(positive(cover) + positive(barDiameter) / 2, 0.1);
+        gs = Math.sqrt(Math.pow(spacing / 2, 2) + Math.pow(cm, 2));
+        betaPrime = (Number.isFinite(d) && d > kd)
+            ? (h - kd) / (d - kd)
+            : Infinity;
+        fsChange = Math.max(fs - 0.5 * positive(shrinkageSteelStress), 0);
+        crackWidth = Number.isFinite(betaPrime) && Number.isFinite(gs) && Es > 0
+            ? 2.0 * betaPrime * fsChange * gs / Es
+            : Infinity;
+    } else if (cracked) {
+        crackWidth = Infinity;
+    }
+
+    // The crack-width equation in Cl. 2.4.4.6 allows axial force through
+    // the transformed-section stress solution. The significant-axial-load
+    // restriction applies to the empirical Cl. 6.8.3 effective-inertia method,
+    // which is reported as a wall-panel screening estimate separately.
+    const methodApplicable = Number.isFinite(Icr) && Icr > 0 &&
+        (!cracked || serviceSection?.valid === true);
+    const serviceSteelStressOK = Number.isFinite(fs) && fs <= fy + 1e-9;
+    const numericalPass = valid && serviceSteelStressOK && Number.isFinite(crackWidth) &&
+        crackWidth >= 0 && crackWidth <= crackWidthLimit + 1e-9;
+    const actionConfirmed = momentInputConfirmed === true;
+    const pass = numericalPass && methodApplicable && actionConfirmed;
+    const status = !valid
+        ? 'NOT VERIFIED'
+        : !methodApplicable
+            ? 'OUTSIDE SCREENING METHOD SCOPE'
+            : !actionConfirmed
+                ? (numericalPass ? 'PROVISIONAL — VERIFY SLS ACTIONS' : 'CHECK — VERIFY SLS ACTIONS')
+                : numericalPass
+                    ? 'PASS'
+                    : 'FAIL';
+
+    return {
+        ...common,
+        valid,
+        methodApplicable,
+        methodDescription: 'Flexural crack-width screening with transformed cracked-section stress; Eq. 6-2 effective inertia is adapted for the axial-load edge stress and is not a wall rational-stability analysis.',
+        Icr,
+        Ie,
+        inertiaRatio,
+        kd,
+        d,
+        betaPrime,
+        fs,
+        serviceSteelStressOK,
+        fsChange,
+        shrinkageSteelStress: positive(shrinkageSteelStress),
+        cm,
+        spacingForCrackWidth: spacing,
+        gs,
+        crackWidth,
+        crackWidthUtilisation: crackWidthLimit > 0 ? crackWidth / crackWidthLimit : Infinity,
+        serviceSectionValid: cracked ? serviceSection?.valid === true : true,
+        serviceSectionReason: serviceSection?.reason || null,
+        methodApplicable,
+        checks: {
+            numericalPass,
+            methodApplicable,
+            actionConfirmed,
+            pass,
+            status
+        }
+    };
+}
+
+export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {}, materials = {}) {
+    const material = materials.concrete || calculateConcreteMaterialProperties(input);
+    const fc = positive(material.fc);
+    const Ec = positive(material.EcSls, positive(material.Ec));
+    const Es = positive(material.Es, 200000);
+    const fr = positive(material.fr);
+    const limit = positive(input.crackWidthLimit, 0.30) || 0.30;
+    const fsC = positive(input.crackShrinkageSteelStress);
+    const width = positive(input.wallWidth) * 1000;
+    const thickness = positive(input.wallThickness) * 1000;
+    const cover = positive(input.cover);
+    const barDia = positive(input.VbarDia);
+    const barSpacing = positive(input.VbarSpace);
+    const ipGeometry = inPlane.geometry || {};
+    const ipSectionChecks = inPlane.sectionChecks || {};
+    const ipBarsRaw = Array.isArray(ipSectionChecks.bars) ? ipSectionChecks.bars : [];
+    const layers = Math.max(1, Math.round(positive(input.BarLayers, thickness > 200 ? 2 : 1)));
+    let ipBars;
+
+    if (input.hasBoundaryElement === false || ipBarsRaw.length === 0) {
+        const span = Math.max(width - 2 * cover, 0);
+        const count = barSpacing > 0 ? Math.max(2, Math.floor(span / barSpacing) + 1) : 0;
+        ipBars = [];
+        for (let i = 0; i < count; i++) {
+            const z = count === 1 ? width / 2 : cover + i * span / (count - 1);
+            ipBars.push({
+                z,
+                As: areaBar(barDia) * layers,
+                diameter: barDia,
+                type: 'distributed'
+            });
+        }
+    } else {
+        ipBars = ipBarsRaw.map((bar) => {
+            const isBoundary = String(bar.type || '').startsWith('boundary');
+            const diameter = isBoundary
+                ? positive(input.boundaryBarDiameter, barDia)
+                : barDia;
+            return {
+                z: positive(bar.x),
+                As: positive(bar.As) * layers,
+                diameter,
+                type: bar.type || 'reinforcement'
+            };
+        });
+    }
+
+    const ipAxialRaw = input.crackSlsAxialInPlane;
+    const ipAxialConfirmed = ipAxialRaw !== null && ipAxialRaw !== undefined &&
+        String(ipAxialRaw).trim() !== '' && Number.isFinite(Number(ipAxialRaw));
+    const ipAxial = ipAxialConfirmed
+        ? Number(ipAxialRaw)
+        : finite(inPlane.elasticStress?.Nservice);
+    const ipAxialSource = ipAxialConfirmed
+        ? 'User-entered governing SLS axial force'
+        : 'Automatic estimate from unfactored gravity actions';
+    const ipAutoMoment = Math.abs(finite(inPlane.sectionActions?.Mlintel)) +
+        Math.abs(positive(input.diaphragmWindForce) * positive(input.wallHeight));
+    const ipOverride = positive(input.crackSlsMomentInPlane);
+    const ipMoment = ipOverride > 0 ? ipOverride : ipAutoMoment;
+    const ipMomentSource = ipOverride > 0
+        ? 'User-entered governing SLS moment'
+        : 'Automatic estimate from wind diaphragm + lintel eccentricity; not a complete SLS load envelope';
+    const ipNormalizedAxial = fc > 0 && positive(ipGeometry.Ag) > 0
+        ? Math.abs(ipAxial * 1000 / (fc * ipGeometry.Ag))
+        : Infinity;
+    const ipInputConfirmed = ipOverride > 0 && ipAxialConfirmed;
+
+    const calculateTwoSenses = (args) => {
+        const first = calculateFlexuralCrackDirection({
+            ...args,
+            direction: 'Edge A in compression',
+            bars: args.bars.map((bar) => ({ ...bar, z: bar.z })),
+        });
+        const second = calculateFlexuralCrackDirection({
+            ...args,
+            label: args.label,
+            direction: 'Edge B in compression',
+            bars: args.bars.map((bar) => ({ ...bar, z: args.depth - bar.z })),
+        });
+        // Governing flexural crack width is used. When both senses are uncracked,
+        // keep the first for stable/repeatable reporting.
+        const governing = [first, second].sort((a, b2) =>
+            (Number.isFinite(b2.crackWidth) ? b2.crackWidth : Infinity) -
+            (Number.isFinite(a.crackWidth) ? a.crackWidth : Infinity)
+        )[0];
+        return {
+            ...governing,
+            senses: [first, second],
+            checks: {
+                ...governing.checks,
+                numericalPass: first.checks.numericalPass && second.checks.numericalPass,
+                methodApplicable: first.checks.methodApplicable && second.checks.methodApplicable,
+                actionConfirmed: args.momentInputConfirmed === true,
+                pass: first.checks.pass && second.checks.pass,
+                status: !(first.checks.pass && second.checks.pass)
+                    ? governing.checks.status
+                    : 'PASS'
+            }
+        };
+    };
+
+    const inPlaneResult = calculateTwoSenses({
+        label: 'In-plane flexural crack control',
+        breadth: thickness,
+        depth: width,
+        bars: ipBars,
+        nominalSpacing: barSpacing,
+        cover,
+        barDiameter: barDia,
+        fc,
+        fr,
+        Es,
+        Ec,
+        axialForce: ipAxial,
+        moment: ipMoment,
+        crackWidthLimit: limit,
+        shrinkageSteelStress: fsC,
+        normalizedAxialLoadRatio: ipNormalizedAxial,
+        momentSource: ipMomentSource,
+        axialSource: ipAxialSource,
+        momentInputConfirmed: ipInputConfirmed,
+        steelYieldStrength: positive(input.fy)
+    });
+
+    const oop = outOfPlane || {};
+    const oopDepth = thickness;
+    const oopWidth = 1000;
+    const oopSpacing = positive(input.VbarSpace);
+    const oopBarArea = areaBar(barDia) * 1000 / Math.max(oopSpacing, 0.001);
+    const oopLayers = Math.max(1, Math.round(positive(oop.numLayers, layers)));
+    let oopBars;
+    if (oopLayers >= 2) {
+        oopBars = [
+            { z: cover + barDia / 2, As: oopBarArea, diameter: barDia, type: 'face-1' },
+            { z: oopDepth - cover - barDia / 2, As: oopBarArea, diameter: barDia, type: 'face-2' }
+        ];
+    } else {
+        // The legacy OOP model assumes a single vertical bar layer near mid-thickness.
+        oopBars = [{
+            z: oopDepth / 2,
+            As: oopBarArea,
+            diameter: barDia,
+            type: 'single-layer'
+        }];
+    }
+
+    const oopAxialRaw = input.crackSlsAxialOutOfPlane;
+    const oopAxialConfirmed = oopAxialRaw !== null && oopAxialRaw !== undefined &&
+        String(oopAxialRaw).trim() !== '' && Number.isFinite(Number(oopAxialRaw));
+    const oopAxial = oopAxialConfirmed
+        ? Number(oopAxialRaw)
+        : finite(oop.N_GE) + finite(oop.Wq_line);
+    const oopAxialSource = oopAxialConfirmed
+        ? 'User-entered governing SLS axial force per metre'
+        : 'Automatic estimate from unfactored gravity actions per metre';
+    const add = oop.additionalLoads || {};
+    const oopMidWindMoment = Math.abs(finite(oop.MW) + finite(add.M_add_mid_F) + finite(add.M_add_mid_M));
+    const oopBaseWindMoment = Math.abs(finite(oop.MbW));
+    const oopAutoMoment = Math.max(oopMidWindMoment, oopBaseWindMoment);
+    const oopOverride = positive(input.crackSlsMomentOutOfPlane);
+    const oopMoment = oopOverride > 0 ? oopOverride : oopAutoMoment;
+    const oopMomentSource = oopOverride > 0
+        ? 'User-entered governing SLS moment per metre'
+        : 'Automatic estimate from wall wind pressure; not a complete SLS load envelope';
+    const oopAg = oopWidth * oopDepth;
+    const oopNormalizedAxial = fc > 0 && oopAg > 0
+        ? Math.abs(oopAxial * 1000 / (fc * oopAg))
+        : Infinity;
+    const oopInputConfirmed = oopOverride > 0 && oopAxialConfirmed;
+
+    const outOfPlaneResult = calculateTwoSenses({
+        label: 'Out-of-plane flexural crack control',
+        breadth: oopWidth,
+        depth: oopDepth,
+        bars: oopBars,
+        nominalSpacing: oopSpacing,
+        cover,
+        barDiameter: barDia,
+        fc,
+        fr,
+        Es,
+        Ec,
+        axialForce: oopAxial,
+        moment: oopMoment,
+        crackWidthLimit: limit,
+        shrinkageSteelStress: fsC,
+        normalizedAxialLoadRatio: oopNormalizedAxial,
+        momentSource: oopMomentSource,
+        axialSource: oopAxialSource,
+        momentInputConfirmed: oopInputConfirmed,
+        steelYieldStrength: positive(input.fy)
+    });
+
+    const warnings = [
+        !material.densityInRange ? 'Concrete density is outside NZS 3101.1 Cl. 5.2.2 range 1800–2800 kg/m³; confirm the material model.' : null,
+        ipNormalizedAxial > 0.015 ? 'In-plane normalized axial load exceeds 0.015; verify the BRANZ low-axial-load guide scope and use a rational model if required.' : null,
+        oopNormalizedAxial > 0.015 ? 'Out-of-plane normalized axial load exceeds 0.015; verify the BRANZ low-axial-load guide scope and use a rational model if required.' : null,
+        !ipInputConfirmed ? 'In-plane crack check requires explicit governing SLS moment and SLS axial force inputs; automatic values are screening estimates only.' : null,
+        !oopInputConfirmed ? 'OOP crack check requires explicit governing SLS moment and SLS axial force per metre; automatic values are screening estimates only.' : null,
+        fsC === 0 ? 'f_s,c is set to zero. This follows NZS 3101 Cl. 2.4.4.6 only where the applicable long-term unrestrained shrinkage condition is justified; otherwise estimate and enter f_s,c.' : null,
+        'NZS 3101 Cl. 2.4.4.1 specifies crack control for serviceability combinations excluding wind and seismic actions. The entered N_SLS/M_SLS should represent the governing combinations required by the adopted design basis; any wind/seismic-driven crack check should be identified as a separate supplemental check.',
+        'The 0.30 mm default crack-width limit is a project starting assumption, not a universal NZS 3101 limit. Set the acceptance limit for the project exposure and serviceability requirements.',
+        'The calculation addresses flexural surface cracking only. It does not calculate restraint-induced thermal/shrinkage cracking, crack spacing provisions, durability detailing or a complete SLS load-combination envelope.'
+    ].filter(Boolean);
+
+    return {
+        materials: {
+            Ec: material.Ec,
+            EcSls: Ec,
+            Es,
+            fc,
+            rhoConcrete: material.rhoConcrete,
+            lambdaConcrete: material.lambdaConcrete,
+            fr,
+            densityInRange: material.densityInRange
+        },
+        limit,
+        shrinkageSteelStress: fsC,
+        inPlane: inPlaneResult,
+        outOfPlane: outOfPlaneResult,
+        checks: {
+            inPlanePass: inPlaneResult.checks.pass,
+            outOfPlanePass: outOfPlaneResult.checks.pass,
+            overallPass: inPlaneResult.checks.pass && outOfPlaneResult.checks.pass
+        },
+        reviewRequired: true,
+        warnings,
+        methodNote: 'Flexural surface crack width per NZS 3101.1 Cl. 2.4.4.6. The interpolated effective inertia and the in-plane/OOP action defaults are screening calculations; confirm project SLS combinations, shrinkage assumptions, reinforcement layout and wall-specific rational analysis.'
+    };
+}
+
 /* ============================================================================
 CONNECTION DESIGN
 Rev 0.8：
@@ -1846,6 +2582,7 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
         ['wallHeight', 'Wall height'],
         ['wallThickness', 'Wall thickness'],
         ['partPeriod', 'Out-of-plane part period'],
+        ['crackWidthLimit', 'Project crack-width limit'],
         ['fc', "Concrete strength f'c"],
         ['fy', 'Reinforcement yield strength fy'],
         ['VbarDia', 'Vertical reinforcement diameter'],
@@ -1861,6 +2598,19 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
         const value = number(key);
         if (!Number.isFinite(value) || value <= 0) {
             errors.push(`${label} must be a finite value greater than zero.`);
+        }
+    }
+
+    for (const key of ['crackSlsAxialInPlane', 'crackSlsAxialOutOfPlane']) {
+        const value = input[key];
+        if (value !== null && value !== undefined && String(value).trim() !== '' && !Number.isFinite(Number(value))) {
+            errors.push(`${key} must be blank for automatic screening or a finite numeric SLS axial force.`);
+        }
+    }
+    for (const key of ['crackSlsMomentInPlane', 'crackSlsMomentOutOfPlane', 'crackShrinkageSteelStress']) {
+        const value = number(key);
+        if (!Number.isFinite(value) || value < 0) {
+            errors.push(`${key} must be a finite non-negative value.`);
         }
     }
 
@@ -1912,7 +2662,14 @@ export function validateDesignInputs(input = {}, inPlane = {}) {
 /* ============================================================================ 
 DESIGN SUMMARY
 =========================================================================== */
-export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation = {}) {
+export function buildDesignSummary(
+    inPlane,
+    outOfPlane,
+    connection,
+    foundation,
+    validation = {},
+    crackControl = null
+) {
     const ipChecks = inPlane?.checks || {};
     const inPlaneChecks = [
         ipChecks.stressCompressionPass,
@@ -1928,9 +2685,9 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         ipChecks.verticalRatioOK !== false
     ].every(Boolean);
     const oopChecks = outOfPlane?.overallOK === true;
-    // A missing result is not equivalent to a successful check.
     const connectionChecks = connection?.checks?.overallPass === true;
     const foundationChecks = foundation?.checks?.overallPass === true;
+    const crackControlPass = crackControl?.checks?.overallPass === true;
     const slendernessWarning = Boolean(ipChecks.slendernessWarning);
     const hroofWarning = outOfPlane?.hroofValidation?.hroofValid === false;
     const pDeltaWarning = outOfPlane?.pDeltaStable === false;
@@ -1938,11 +2695,13 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
     const slenderMethodWarning = outOfPlane?.pDelta?.slenderMethodApplicable === false;
     const validationErrors = Array.isArray(validation.errors) ? validation.errors : [];
     const validationWarnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+    const crackWarnings = Array.isArray(crackControl?.warnings) ? crackControl.warnings : [];
 
-    // Critical items below remain incomplete. The application may report individual
-    // screening checks, but must not advertise an overall code-compliant design.
+    // The flexural crack-width calculation is now implemented, but it remains a
+    // screening method until the SLS action envelope, fs,c, project limit and wall
+    // axial-load applicability have been independently confirmed.
     const reviewItems = [
-        'SLS crack-width verification is not implemented.',
+        'Flexural crack width is modelled as a screening check only; confirm the governing SLS action combinations, crack-width acceptance limit, shrinkage stress f_s,c, and wall-specific rational analysis.',
         'In-plane drift/deflection and explicit SLS out-of-plane deflection limits are not verified; the reported P-Delta displacement is not an SLS serviceability check.',
         'The full AS/NZS 1170.0 ULS/SLS load-combination envelope and reverse-action cases are not generated; verify wind, earthquake, gravity and diaphragm actions separately.',
         'Foundation verification is limited to simplified bearing/sliding/uplift screening; footing flexure, one-way/punching shear, reinforcement development, geotechnical settlement and complete bearing pressure cases are not checked.',
@@ -1954,17 +2713,20 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         oopChecks &&
         connectionChecks &&
         foundationChecks &&
+        crackControlPass &&
         validationErrors.length === 0 &&
         !hroofWarning &&
         !pDeltaWarning &&
         !stabilityWarning;
 
-    // Deliberately false until each critical review item is implemented and validated.
+    // Deliberately false until all critical checks, including SLS and foundation
+    // verification, are completed and benchmarked.
     const designComplete = false;
     const overallPass = implementedChecksPass && designComplete;
     const warnings = [
         ...validationErrors,
         ...validationWarnings,
+        ...crackWarnings,
         slendernessWarning ?
             'Wall h/t exceeds 25. The BRANZ slender-panel applicability and stability checks must be verified.' : null,
         hroofWarning ?
@@ -1974,11 +2736,12 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         stabilityWarning ?
             'Panel stability checks (H/t, kH/t, Euler and Vlasov) are not all satisfied.' : null,
         slenderMethodWarning ?
-            'NZS 3101 Cl 11.3.5.1.2 simplified P-Delta method is outside its stated scope; use a rational analysis.' : null,
+            'NZS 3101 Cl. 11.3.5.1.2 simplified P-Delta method is outside its stated scope; use a rational analysis.' : null,
         !inPlaneChecks ? 'One or more implemented in-plane checks failed or are invalid.' : null,
         !oopChecks ? 'One or more implemented out-of-plane checks failed or are invalid.' : null,
         !connectionChecks ? 'Connection checks failed or are unavailable; do not treat the connection as verified.' : null,
         !foundationChecks ? 'Foundation checks failed or are unavailable; do not treat the foundation as verified.' : null,
+        !crackControlPass ? 'SLS crack-control results are provisional or failed; confirm the SLS moments and crack-width acceptance basis.' : null,
         ...reviewItems
     ].filter(Boolean);
 
@@ -1987,6 +2750,7 @@ export function buildDesignSummary(inPlane, outOfPlane, connection, foundation, 
         outOfPlanePass: oopChecks,
         connectionPass: connectionChecks,
         foundationPass: foundationChecks,
+        crackControlPass,
         implementedChecksPass,
         designComplete,
         reviewRequired: true,
@@ -2008,23 +2772,29 @@ MAIN PUBLIC API
 =========================================================================== */
 export function calculatePrecastPanelDesign(rawInput = {}) {
     const input = { ...rawInput };
+    const materials = {
+        concrete: calculateConcreteMaterialProperties(input)
+    };
     const inPlane = calculateInPlaneDesign(input);
     const outOfPlane = calculateOutOfPlaneDesign(input);
+    const crackControl = calculateCrackControl(input, inPlane, outOfPlane, materials);
     const connection = calculateConnectionDesign(input, inPlane, outOfPlane);
     const foundation = calculateFoundationDesign(input, inPlane);
     const validation = validateDesignInputs(input, inPlane);
-    const summary = buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation);
+    const summary = buildDesignSummary(inPlane, outOfPlane, connection, foundation, validation, crackControl);
     return {
         input,
+        materials,
         inPlane,
         outOfPlane,
+        crackControl,
         connection,
         foundation,
         validation,
         summary,
         meta: {
             engine: 'PrecastPanelCalculation',
-            version: '0.8.0-nzs3101-branz-alignment',
+            version: '0.9.0-nzs3101-crack-control-screening',
             status: 'Unified In-Plane + Out-of-Plane + Connection + Foundation framework',
             note: 'Rev 0.8: fixed OOP crash (twall) and mm/m unit errors; Sp ≥ 0.7; P-delta per NZS 3101 Cl 11.3.5.1.2 (0.75 factor, Ase=N*+Asfy/fy, 0.05t ecc, applicability limits); Ec per Cl 5.2.3; in-plane shear per Cl 11.3.10 (Eq 11-12~11-19, vmax=0.2fc≤8MPa); OOP shear per Cl 12.7; stability checks (H/t, kH/t, Euler, Vlasov) per BRANZ guide §8.4; phi per Table 2.3.2.2 (fire=1.0, singly-reinforced in-plane=0.7); foundation Z=B·L²/6; connection shear friction per Cl 7.7 + development length per Cl 8.6.3/8.7.2.5.'
         }
