@@ -14,6 +14,41 @@ const kNToN = (value) => finite(value) * 1000;
 const kNmToNmm = (value) => finite(value) * 1e6;
 const max0 = (value) => Math.max(0, finite(value));
 
+
+/* ============================================================================
+SHARED CONCRETE MATERIAL PROPERTIES
+NZS 3101.1:2006 incl. A1/A2/A3, Clauses 5.2.3–5.2.5.
+Ec uses Eq. 5-1; EcSls uses the permitted fc' + 10 MPa option in 5.2.3(d).
+The density is estimated from the entered unit weight and g = 9.81 m/s².
+=========================================================================== */
+export function calculateConcreteMaterialProperties(input = {}) {
+    const fc = positive(input.fc);
+    const concreteDensity = positive(input.concreteDensity, 24);
+    const rhoConcrete = concreteDensity * 1000 / 9.81;
+    const densityInRange = rhoConcrete >= 1800 && rhoConcrete <= 2800;
+    const lambdaConcrete = Math.min(0.4 + 0.6 * rhoConcrete / 2200, 1.0);
+    const Ec = 4700 * Math.sqrt(fc) * Math.pow(rhoConcrete / 2300, 1.5);
+    const EcSls = 4700 * Math.sqrt(fc + 10) * Math.pow(rhoConcrete / 2300, 1.5);
+    const Es = positive(input.Es, 200000);
+    const fr = 0.6 * lambdaConcrete * Math.sqrt(fc);
+
+    return {
+        fc,
+        concreteDensity,
+        rhoConcrete,
+        densityInRange,
+        lambdaConcrete,
+        Ec,
+        EcSls,
+        Es,
+        fr,
+        codeReferences: {
+            modulusOfElasticity: 'NZS 3101.1:2006 incl. A1/A2/A3, Cl. 5.2.3, Eq. 5-1',
+            modulusOfRupture: 'NZS 3101.1:2006 incl. A1/A2/A3, Cl. 5.2.4–5.2.5, Eqs. 5-3 and 5-4'
+        }
+    };
+}
+
 /* ============================================================================
 STATUS
 =========================================================================== */
@@ -1000,8 +1035,9 @@ export function calculateOutOfPlaneDesign(input = {}) {
     const Es = positive(input.Es, 200000);
     /* NZS 3101:2006 Cl 5.2.3：Ec = (3320√f'c + 6900)(ρ/2300)^1.5 MPa。
        γc [kN/m³] 换算质量密度 ρ ≈ γc×1000/9.81 [kg/m³]。 */
-    const rhoConcrete = gammaConcrete * 1000 / 9.81;
-    const Ec = (3320 * Math.sqrt(Math.max(fc, 0)) + 6900) * Math.pow(rhoConcrete / 2300, 1.5);
+    const material = calculateConcreteMaterialProperties(input);
+    const rhoConcrete = material.rhoConcrete;
+    const Ec = material.Ec;
     const n = Ec > 0 ? Es / Ec : 0;
 
     /* Unified reinforcement */
