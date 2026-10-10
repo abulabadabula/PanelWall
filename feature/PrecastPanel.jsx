@@ -1433,6 +1433,11 @@ function CalculationTab({ inputs, results }) {
               Scope warning: {item}
             </Typography>
           ))}
+          {(ResultConnection.warnings || []).map((item) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5, fontWeight: 700 }}>
+              Connection warning: {item}
+            </Typography>
+          ))}
         </Alert>
       )}
       <CalculationSection number="0" title="Input Data Used · 输入参数汇总" chip={<Chip size="small" label="Live inputs" />}>
