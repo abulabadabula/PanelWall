@@ -1917,7 +1917,9 @@ function calculateFlexuralCrackDirection({
         flexuralCracking,
         cracked,
         normalizedAxialLoadRatio,
-        normalizedAxialLoadLimit: 0.06,
+        // NZS 3101 Cl. 6.8.3 describes Ie for beams/slabs without significant axial load.
+        // Keep the wall-panel Ie result explicitly screening-only; do not impose an
+        // unsupported numerical axial-load cutoff on the Cl. 2.4.4.6 crack-width check.
         momentSource,
         axialSource,
         momentInputConfirmed,
@@ -2050,8 +2052,12 @@ function calculateFlexuralCrackDirection({
         crackWidth = Infinity;
     }
 
-    const methodApplicable = normalizedAxialLoadRatio <= 0.06 &&
-        Number.isFinite(Icr) && Icr > 0;
+    // The crack-width equation in Cl. 2.4.4.6 allows axial force through
+    // the transformed-section stress solution. The significant-axial-load
+    // restriction applies to the empirical Cl. 6.8.3 effective-inertia method,
+    // which is reported as a wall-panel screening estimate separately.
+    const methodApplicable = Number.isFinite(Icr) && Icr > 0 &&
+        (!cracked || serviceSection?.valid === true);
     const serviceSteelStressOK = Number.isFinite(fs) && fs <= fy + 1e-9;
     const numericalPass = valid && serviceSteelStressOK && Number.isFinite(crackWidth) &&
         crackWidth >= 0 && crackWidth <= crackWidthLimit + 1e-9;
@@ -2301,6 +2307,7 @@ export function calculateCrackControl(input = {}, inPlane = {}, outOfPlane = {},
         !ipInputConfirmed ? 'In-plane crack check requires explicit governing SLS moment and SLS axial force inputs; automatic values are screening estimates only.' : null,
         !oopInputConfirmed ? 'OOP crack check requires explicit governing SLS moment and SLS axial force per metre; automatic values are screening estimates only.' : null,
         fsC === 0 ? 'f_s,c is set to zero. This follows NZS 3101 Cl. 2.4.4.6 only where the applicable long-term unrestrained shrinkage condition is justified; otherwise estimate and enter f_s,c.' : null,
+        'NZS 3101 Cl. 2.4.4.1 specifies crack control for serviceability combinations excluding wind and seismic actions. The entered N_SLS/M_SLS should represent the governing combinations required by the adopted design basis; any wind/seismic-driven crack check should be identified as a separate supplemental check.',
         'The 0.30 mm default crack-width limit is a project starting assumption, not a universal NZS 3101 limit. Set the acceptance limit for the project exposure and serviceability requirements.',
         'The calculation addresses flexural surface cracking only. It does not calculate restraint-induced thermal/shrinkage cracking, crack spacing provisions, durability detailing or a complete SLS load-combination envelope.'
     ].filter(Boolean);
