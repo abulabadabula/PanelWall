@@ -1538,7 +1538,9 @@ function ResultsTab({ inputs, results }) {
         <ResultRow label="Cp(Tp)" value={fmt(ps.partCpTp, 3)} unit="" />
         <ResultRow label="Cph (response)" value={fmt(ps.partCph, 3)} unit="" />
         <ResultRow label="Rp (risk)" value={fmt(ps.partRp, 3)} unit="" />
-        <ResultRow label="Tp (part period)" value={fmt(ps.partPeriod, 3)} unit="s" />
+        <ResultRow label="Tp (part period used)" value={fmt(ps.partPeriod, 3)} unit="s" />
+        <ResultRow label="Tp method" value={ps.partPeriodSource || 'not reported'} unit="" />
+        <ResultRow label="Simplified Tp estimate" value={fmt(ps.partPeriodEstimate, 3)} unit="s" />
         <ResultRow label="Wp (panel weight)" value={fmt(ps.Wp_panel, 3)} unit="kPa" />
         <ResultRow label="Fp (design pressure)" value={fmt(ps.Fp_panel, 3)} unit="kPa" highlight />
       </Paper>
