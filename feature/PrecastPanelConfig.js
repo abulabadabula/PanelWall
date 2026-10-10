@@ -208,7 +208,9 @@ export const INPUT_SECTIONS = [
       { key: 'crackWidthLimit', label: 'Project Crack Width Limit', unit: 'mm', step: '0.05', min: '0.05' },
       { key: 'crackShrinkageSteelStress', label: 'Pre-cracking Steel Stress f_s,c', unit: 'MPa', step: '5', min: '0' },
       { key: 'crackSlsMomentInPlane', label: 'In-Plane SLS Moment Override (0 = auto estimate)', unit: 'kN·m', step: '1', min: '0' },
-      { key: 'crackSlsMomentOutOfPlane', label: 'OOP SLS Moment Override (0 = auto estimate)', unit: 'kN·m/m', step: '0.1', min: '0' }
+      { key: 'crackSlsMomentOutOfPlane', label: 'OOP SLS Moment Override (0 = auto estimate)', unit: 'kN·m/m', step: '0.1', min: '0' },
+      { key: 'crackSlsAxialInPlane', label: 'In-Plane SLS Axial Force (blank = auto)', unit: 'kN', step: '1', min: '-10000' },
+      { key: 'crackSlsAxialOutOfPlane', label: 'OOP SLS Axial Force (blank = auto)', unit: 'kN/m', step: '0.1', min: '-10000' }
     ]
   },
   {
@@ -411,6 +413,8 @@ export const DEFAULT_INPUTS = {
   crackShrinkageSteelStress: 0,
   crackSlsMomentInPlane: 0,
   crackSlsMomentOutOfPlane: 0,
+  crackSlsAxialInPlane: null,
+  crackSlsAxialOutOfPlane: null,
 
   /* --------------------------------------------------------------------------
   13. Foundation and Hold Down Check
