@@ -405,8 +405,6 @@ export const DEFAULT_INPUTS = {
   Connection —— 由 calculateConnectionDesign 使用
   ------------------------------------------------------------------------ */
   baseConnectionType: 'Dowel / Grouted Connection',
-  topConnectionType: 'Pinned',
-  panelConnectionType: 'None',
   baseDowelDiameter: 16,
   baseDowelCount: 4,
   baseDowelEmbedment: 300,
@@ -491,10 +489,10 @@ export const DESIGN_DIRECTIONS = {
 SUPPORT CONDITIONS
 ========================================================================== */
 export const SUPPORT_CONDITIONS = [
-  { value: 'Pinned-Pinned', label: 'Pinned – Pinned', effectiveLengthFactor: 1.00 },
-  { value: 'Fixed-Pinned', label: 'Fixed – Pinned', effectiveLengthFactor: 0.70 },
-  { value: 'Fixed-Fixed', label: 'Fixed – Fixed', effectiveLengthFactor: 0.50 },
-  { value: 'Fixed-Free', label: 'Cantilever', effectiveLengthFactor: 2.00 }
+  { value: 'Pinned-Pinned', label: 'Pinned – Pinned' },
+  { value: 'Fixed-Pinned', label: 'Fixed – Pinned' },
+  { value: 'Fixed-Fixed', label: 'Fixed – Fixed' },
+  { value: 'Fixed-Free', label: 'Cantilever' }
 ];
 
 /* ============================================================================
