@@ -337,7 +337,7 @@ function InputTab({ inputs, setInputs, previewResults }) {
           {section.id === 'seismic' && (
             <Alert severity="warning" sx={{ mt: 2 }}>
               Seismic parameters shared between In-Plane and OOP. OOP seismic action follows
-              AS/NZS 1170.5:2004 Chapter 8 (parts): Fp = Cp × H × Wp, with H = 1 + 2(hx/hn)
+              NZS 1170.5:2004 Chapter 8 (parts): Fp = Cp × H × Wp, with H = 1 + 2(hx/hn)
               and Wp = wall panel weight (computed from geometry).
             </Alert>
           )}
@@ -594,7 +594,7 @@ function InPlaneSeismicBlock({ inputs, inPlane }) {
   // console.log("inplaneSeismic input:", inputs)
 
   return (
-    <CalculationSection number="3" title="In-Plane Seismic Action · 平面内抗震作用" chip={<Chip size="small" label="AS/NZS 1170.5 §3.2.2" />}>
+    <CalculationSection number="3" title="In-Plane Seismic Action · 平面内抗震作用" chip={<Chip size="small" label="NZS 1170.5 §3.2.2" />}>
       <CalculationFormula caption="Elastic site hazard coefficient / 弹性场地危险系数"
         formula={`C(T_1) = C_h(T_1)\\,Z\\,R_u\\,N(T,D) = ${tx(seismicInp.Ch)}\\times${tx(seismicInp.Z)}\\times${tx(seismicInp.Ru)}\\times${tx(seismicInp.Nt)} = ${tx(seismicInp.CT1, 4)}`} />
       <CalculationFormula caption="Structural performance factor / 结构性能系数"
@@ -819,7 +819,7 @@ function OutOfPlaneWindSeismicBlock({ inputs, outOfPlane }) {
   const oopSh = oop.oopShear || {};
 
   return (
-    <CalculationSection number="6" title="Out-of-Plane Design (Wind & Seismic) · 平面外设计（风与地震）" chip={<Chip size="small" label="AS/NZS 1170.5 Ch.8 / NZS 3101" />}>
+    <CalculationSection number="6" title="Out-of-Plane Design (Wind & Seismic) · 平面外设计（风与地震）" chip={<Chip size="small" label="NZS 1170.5 Ch.8 / NZS 3101" />}>
 
       <CalculationSubsection title="6.1 OOP Gravity & Lateral Actions · 平面外作用">
         <CalculationFormula caption="Effective hroof / 实际采用值" highlight
@@ -1531,7 +1531,7 @@ function ResultsTab({ inputs, results }) {
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>OOP Part Seismic (AS/NZS 1170.5 Ch.8)</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>OOP Part Seismic (NZS 1170.5 Ch.8)</Typography>
         <ResultRow label="C0 (site hazard)" value={fmt(ps.partC0, 3)} unit="" />
         <ResultRow label="CHi (height amplification)" value={fmt(ps.CHi, 3)} unit="" />
         <ResultRow label="Ci(Tp) (period factor)" value={fmt(ps.partCiTp, 3)} unit="" />
