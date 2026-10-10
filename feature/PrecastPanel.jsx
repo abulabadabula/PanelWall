@@ -274,10 +274,6 @@ function InputTab({ inputs, setInputs, previewResults }) {
                   <SelectInput label="Subsoil class" value={inputs.subsoilClass} onChange={update('subsoilClass')}
                     options={[{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }, { value: 'C', label: 'C' }, { value: 'D', label: 'D' }, { value: 'E', label: 'E' }]} />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                  <SelectInput label="Importance level" value={inputs.importanceLevel} onChange={update('importanceLevel')}
-                    options={[{ value: 'IL1', label: 'IL1' }, { value: 'IL2', label: 'IL2' }, { value: 'IL3', label: 'IL3' }, { value: 'IL4', label: 'IL4' }]} />
-                </Grid>
               </>
             )}
             {section.id === 'support' && (
@@ -290,6 +286,13 @@ function InputTab({ inputs, setInputs, previewResults }) {
                 </Grid>
               </>
             )}
+            {section.id === 'boundary' && (
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                <SelectInput label="Boundary element provided" value={inputs.hasBoundaryElement ? 'yes' : 'no'}
+                  onChange={value => update('hasBoundaryElement')(value === 'yes')}
+                  options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />
+              </Grid>
+            )}
             {section.id === 'connection' && (
               <>
                 <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
@@ -300,6 +303,11 @@ function InputTab({ inputs, setInputs, previewResults }) {
                   <SelectInput label="Shear key" value={inputs.shearKey ? 'yes' : 'no'}
                     onChange={value => update('shearKey')(value === 'yes')}
                     options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                  <SelectInput label="Shear plane intentionally roughened (≥2 mm)" value={inputs.shearPlaneRoughened ? 'yes' : 'no'}
+                    onChange={value => update('shearPlaneRoughened')(value === 'yes')}
+                    options={[{ value: 'no', label: 'No / not confirmed' }, { value: 'yes', label: 'Yes — specified and detailed' }]} />
                 </Grid>
               </>
             )}
@@ -329,7 +337,7 @@ function InputTab({ inputs, setInputs, previewResults }) {
           {section.id === 'seismic' && (
             <Alert severity="warning" sx={{ mt: 2 }}>
               Seismic parameters shared between In-Plane and OOP. OOP seismic action follows
-              AS/NZS 1170.5:2004 Chapter 8 (parts): Fp = Cp × H × Wp, with H = 1 + 2(hx/hn)
+              NZS 1170.5:2004 Chapter 8 (parts): Fp = Cp × H × Wp, with H = 1 + 2(hx/hn)
               and Wp = wall panel weight (computed from geometry).
             </Alert>
           )}
@@ -339,6 +347,11 @@ function InputTab({ inputs, setInputs, previewResults }) {
               base moment calculations (UR1, UR2). <br />
               <strong>Fire support</strong> (default: Fixed–Free / Cantilever) controls the fire moment
               calculation (UR3). During fire the top support may be lost, resulting in cantilever action.
+            </Alert>
+          )}
+          {section.id === 'connection' && inputs.baseConnectionType !== 'Dowel / Grouted Connection' && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              The selected connection type is not verified by this calculation engine. Current connection ratios use the dowel / grouted model only; do not rely on them for a welded or bolted connection.
             </Alert>
           )}
           {section.id === 'connection' && (
@@ -408,12 +421,9 @@ function InputSummaryTable({ inputs }) {
     ['ψe (抗震组合系数)', tx(inputs.psiE), ''],
     ['OOP part coefficient Cp (Table 8.1)', tx(inputs.partSpectralShapeFactorT0), ''],
     ['OOP part hx / hn', `${tx(inputs.partHeightHx)} / ${tx(inputs.buildingHeightHn)}`, 'm'],
-    ['OOP Part ap (Importance)', tx(inputs.partImportanceFactor), ''],
     ['OOP Part Rp (Modification)', tx(inputs.partRiskFactor), ''],
     ['OOP Part μp (Ductility)', tx(inputs.partDuctility), ''],
     ['OOP Part Tp (Period)', tx(inputs.partPeriod), 's'],
-    ['Building Tn (Period)', tx(inputs.buildingPeriod), 's'],
-    ['Building Importance I', tx(inputs.importanceFactor), ''],
     ['Vertical bar φV@Sv (竖向筋)', `${tx(inputs.VbarDia, 0)} @ ${tx(inputs.VbarSpace, 0)}`, 'mm'],
     ['Horizontal bar φH@Sh (水平筋)', `${tx(inputs.HbarDia, 0)} @ ${tx(inputs.HbarSpace, 0)}`, 'mm'],
     ['BarLayers (纵筋层数)', tx(inputs.BarLayers, 0), 'layers'],
@@ -584,7 +594,7 @@ function InPlaneSeismicBlock({ inputs, inPlane }) {
   // console.log("inplaneSeismic input:", inputs)
 
   return (
-    <CalculationSection number="3" title="In-Plane Seismic Action · 平面内抗震作用" chip={<Chip size="small" label="AS/NZS 1170.5 §3.2.2" />}>
+    <CalculationSection number="3" title="In-Plane Seismic Action · 平面内抗震作用" chip={<Chip size="small" label="NZS 1170.5 §3.2.2" />}>
       <CalculationFormula caption="Elastic site hazard coefficient / 弹性场地危险系数"
         formula={`C(T_1) = C_h(T_1)\\,Z\\,R_u\\,N(T,D) = ${tx(seismicInp.Ch)}\\times${tx(seismicInp.Z)}\\times${tx(seismicInp.Ru)}\\times${tx(seismicInp.Nt)} = ${tx(seismicInp.CT1, 4)}`} />
       <CalculationFormula caption="Structural performance factor / 结构性能系数"
@@ -809,7 +819,7 @@ function OutOfPlaneWindSeismicBlock({ inputs, outOfPlane }) {
   const oopSh = oop.oopShear || {};
 
   return (
-    <CalculationSection number="6" title="Out-of-Plane Design (Wind & Seismic) · 平面外设计（风与地震）" chip={<Chip size="small" label="AS/NZS 1170.5 Ch.8 / NZS 3101" />}>
+    <CalculationSection number="6" title="Out-of-Plane Design (Wind & Seismic) · 平面外设计（风与地震）" chip={<Chip size="small" label="NZS 1170.5 Ch.8 / NZS 3101" />}>
 
       <CalculationSubsection title="6.1 OOP Gravity & Lateral Actions · 平面外作用">
         <CalculationFormula caption="Effective hroof / 实际采用值" highlight
@@ -1400,9 +1410,36 @@ function CalculationTab({ inputs, results }) {
     <Box>
       <Alert severity={ResultSummary.overallPass ? 'success' : 'warning'} sx={{ mb: 2, fontWeight: 700 }}>
         {ResultSummary.overallPass
-          ? '✓ All implemented checks pass under current inputs.'
-          : '✗ Some checks did not pass. Review sections below.'}
+          ? '✓ All required verification checks are complete and pass under current inputs.'
+          : 'PRELIMINARY — NOT A CODE-COMPLIANCE SIGN-OFF. Individual checks may pass while the overall design remains incomplete or requires engineering review.'}
       </Alert>
+      {!ResultSummary.designComplete && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <Typography sx={{ fontWeight: 800, mb: 1 }}>
+            Items not yet fully verified
+          </Typography>
+          {(ResultSummary.reviewItems || []).map((item, index) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5 }}>
+              {index + 1}. {item}
+            </Typography>
+          ))}
+          {(ResultSummary.validation?.errors || []).map((item) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5 }}>
+              Input issue: {item}
+            </Typography>
+          ))}
+          {(ResultSummary.validation?.warnings || []).map((item) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5 }}>
+              Scope warning: {item}
+            </Typography>
+          ))}
+          {(ResultConnection.warnings || []).map((item) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5, fontWeight: 700 }}>
+              Connection warning: {item}
+            </Typography>
+          ))}
+        </Alert>
+      )}
       <CalculationSection number="0" title="Input Data Used · 输入参数汇总" chip={<Chip size="small" label="Live inputs" />}>
         <InputSummaryTable inputs={inputs} />
       </CalculationSection>
@@ -1494,14 +1531,16 @@ function ResultsTab({ inputs, results }) {
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>OOP Part Seismic (AS/NZS 1170.5 Ch.8)</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>OOP Part Seismic (NZS 1170.5 Ch.8)</Typography>
         <ResultRow label="C0 (site hazard)" value={fmt(ps.partC0, 3)} unit="" />
         <ResultRow label="CHi (height amplification)" value={fmt(ps.CHi, 3)} unit="" />
         <ResultRow label="Ci(Tp) (period factor)" value={fmt(ps.partCiTp, 3)} unit="" />
         <ResultRow label="Cp(Tp)" value={fmt(ps.partCpTp, 3)} unit="" />
         <ResultRow label="Cph (response)" value={fmt(ps.partCph, 3)} unit="" />
         <ResultRow label="Rp (risk)" value={fmt(ps.partRp, 3)} unit="" />
-        <ResultRow label="Tp (part period)" value={fmt(ps.partPeriod, 3)} unit="s" />
+        <ResultRow label="Tp (part period used)" value={fmt(ps.partPeriod, 3)} unit="s" />
+        <ResultRow label="Tp method" value={ps.partPeriodSource || 'not reported'} unit="" />
+        <ResultRow label="Simplified Tp estimate" value={fmt(ps.partPeriodEstimate, 3)} unit="s" />
         <ResultRow label="Wp (panel weight)" value={fmt(ps.Wp_panel, 3)} unit="kPa" />
         <ResultRow label="Fp (design pressure)" value={fmt(ps.Fp_panel, 3)} unit="kPa" highlight />
       </Paper>
@@ -1660,23 +1699,17 @@ export default function PrecastPanel() {
     period: safe(inputs.period),
     spectralShapeFactor: safe(inputs.spectralShapeFactor),
     nearFaultFactor: safe(inputs.nearFaultFactor),
-    seismicWeight: safe(inputs.seismicWeight),
-    seismicDistributionFactor: safe(inputs.seismicDistributionFactor),
     psiE: safe(inputs.psiE),
     partSpectralShapeFactorT0: safe(inputs.partSpectralShapeFactorT0),
     partHeightHx: safe(inputs.partHeightHx),
     buildingHeightHn: safe(inputs.buildingHeightHn),
-    partImportanceFactor: safe(inputs.partImportanceFactor),
     partRiskFactor: safe(inputs.partRiskFactor),
     partDuctility: safe(inputs.partDuctility),
     partPeriod: safe(inputs.partPeriod),
-    buildingPeriod: safe(inputs.buildingPeriod),
-    importanceFactor: safe(inputs.importanceFactor),
     bearingWidth: safe(inputs.bearingWidth),
     bearingLength: safe(inputs.bearingLength),
     supportWindSeismic: inputs.supportWindSeismic || 'Pinned-Pinned',
     supportFire: inputs.supportFire || 'Fixed-Free',
-    effectiveLengthFactor: safe(inputs.effectiveLengthFactor, 1),
     phiFlexure: safe(inputs.phiFlexure, 0.85),
     phiShear: safe(inputs.phiShear, 0.75),
     phiCompression: safe(inputs.phiCompression, 0.85),
@@ -1686,6 +1719,7 @@ export default function PrecastPanel() {
     baseDowelEmbedment: safe(inputs.baseDowelEmbedment),
     groutStrength: safe(inputs.groutStrength),
     shearKey: inputs.shearKey === true || inputs.shearKey === 'yes',
+    shearPlaneRoughened: inputs.shearPlaneRoughened === true || inputs.shearPlaneRoughened === 'yes',
     shearKeyDepth: safe(inputs.shearKeyDepth),
     frictionCoefficient: safe(inputs.frictionCoefficient),
     phiConnection: safe(inputs.phiConnection),
@@ -1709,10 +1743,18 @@ export default function PrecastPanel() {
     setActiveTab(0);
   };
 
-  const statusLabel = results.calculationError ? 'CALCULATION ERROR'
-    : results.summary?.overallPass ? 'DESIGN PASS' : 'CHECK REQUIRED';
-  const statusColor = results.calculationError ? 'error'
-    : results.summary?.overallPass ? 'success' : 'warning';
+  const statusLabel = results.calculationError
+    ? 'CALCULATION ERROR'
+    : results.summary?.overallPass
+      ? 'DESIGN PASS'
+      : results.summary?.designComplete === false
+        ? 'PRELIMINARY / REVIEW REQUIRED'
+        : 'CHECK REQUIRED';
+  const statusColor = results.calculationError
+    ? 'error'
+    : results.summary?.overallPass
+      ? 'success'
+      : 'warning';
 
   return (
     <Box sx={{ width: '100%', minHeight: '100%', bgcolor: '#f5f7fa', py: 2 }}>

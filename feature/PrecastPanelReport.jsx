@@ -271,7 +271,7 @@ export function getPrecastPanelFormulaSections(inputs, results) {
       ]
     },
     {
-      title: '2. In-Plane Seismic Action (AS/NZS 1170.5 §3.2.2)',
+      title: '2. In-Plane Seismic Action (NZS 1170.5 §3.2.2)',
       steps: [
         {
           sub: 'Seismic coefficients',
@@ -369,7 +369,7 @@ export function getPrecastPanelFormulaSections(inputs, results) {
       ]
     },
     {
-      title: '5. Out-of-Plane Design (AS/NZS 1170.5 Ch.8 Parts / §8.5.1)',
+      title: '5. Out-of-Plane Design (NZS 1170.5 Ch.8 Parts / §8.5.1)',
       steps: [
         {
           sub: 'hroof validation',
@@ -379,7 +379,7 @@ export function getPrecastPanelFormulaSections(inputs, results) {
           ]
         },
         {
-          sub: 'OOP lateral actions (AS/NZS 1170.5 Chapter 8 — parts)',
+          sub: 'OOP lateral actions (NZS 1170.5 Chapter 8 — parts)',
           formulas: [
             { caption: 'Part height amplification factor (§8.4.2.3)', tex: `H = 1 + 2\\frac{h_x}{h_n} = 1 + 2\\times\\frac{${tx(ps.hx)}}{${tx(ps.hn)}} = ${tx(ps.H, 3)}` },
             { caption: 'Wall panel tributary weight (per metre length over hroof)', tex: `W_p = \\gamma_c\\,t_w\\,h_{roof} = ${tx(ps.Wp)}\\,\\mathrm{kN/m}` },
@@ -611,7 +611,7 @@ export function getPrecastPanelDetailSections(inputs, results) {
       ]
     },
     {
-      title: '2. In-Plane Seismic Action · 平面内抗震作用 (AS/NZS 1170.5 §3.2.2)',
+      title: '2. In-Plane Seismic Action · 平面内抗震作用 (NZS 1170.5 §3.2.2)',
       steps: [
         {
           sub: '2.1 Seismic coefficients',
@@ -759,7 +759,7 @@ export function getPrecastPanelDetailSections(inputs, results) {
       ]
     },
     {
-      title: '5. Out-of-Plane Design · 平面外设计 (AS/NZS 1170.5 Ch.8 Parts / §8.5.1)',
+      title: '5. Out-of-Plane Design · 平面外设计 (NZS 1170.5 Ch.8 Parts / §8.5.1)',
       steps: [
         {
           sub: '5.1 hroof validation · hroof 校验',
@@ -769,7 +769,7 @@ export function getPrecastPanelDetailSections(inputs, results) {
           ]
         },
         {
-          sub: '5.2 OOP lateral actions (AS/NZS 1170.5 Ch.8 parts) · 平面外水平作用',
+          sub: '5.2 OOP lateral actions (NZS 1170.5 Ch.8 parts) · 平面外水平作用',
           formulas: [
             { caption: 'Part height amplification factor (§8.4.2.3)', tex: `H = 1 + 2\\frac{h_x}{h_n} = 1 + 2\\times\\frac{${tx(ps.hx)}}{${tx(ps.hn)}} = ${tx(ps.H, 3)}` },
             { caption: 'Wall panel tributary weight / 墙板重量（每延米，沿 hroof）', tex: `W_p = \\gamma_c\\,t_w\\,h_{roof} = (${tx(inputs.concreteDensity)})(${tx(safe(inputs.wallThickness))})(${tx(hv.hroofEffective)}) = ${tx(ps.Wp)}\\,\\mathrm{kN/m}` },
