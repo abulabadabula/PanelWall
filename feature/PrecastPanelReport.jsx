@@ -1008,6 +1008,14 @@ export function getPrecastPanelDetailSections(inputs, results) {
             { caption: 'Crack width / 裂缝宽度 (NZS 3101 Cl. 2.4.4.6 Eqs. 2-7 to 2-9)', tex: `w=2.0\\beta'f_{s,ch}g_s/E_s=${tx(crackOOP.crackWidth, 3)}\\,\\mathrm{mm},\\quad UR_w=${txUR(crackOOP.crackWidthUtilisation)}\\;\\Rightarrow\\;\\text{${crackOOP.checks?.status || 'NOT VERIFIED'}}` },
             { caption: 'SLS actions / SLS 作用', tex: `N_{SLS}=${tx(crackOOP.axialForce, 2)}\\,\\mathrm{kN/m},\\quad M_{SLS}=${tx(crackOOP.serviceMoment, 2)}\\,\\mathrm{kN\\cdot m/m}` }
           ]
+        },
+        {
+          sub: '8.4 Method limits / 方法适用范围',
+          formulas: [
+            { caption: 'Action confirmation / 作用确认', tex: `\\text{In-plane action confirmed: ${crackIP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'}; OOP action confirmed: ${crackOOP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'}}` },
+            { caption: 'Effective inertia and scope / 有效惯性矩及适用性', tex: `\\text{NZS 3101 Cl. 6.8.3 Eq. 6-2 is a beam/slab interpolation; the axial-load adaptation for wall panels is a screening estimate.}` },
+            { caption: 'Acceptance assumptions / 验收假定', tex: `\\text{Confirm project crack-width limit, pre-cracking shrinkage stress and governing SLS load combinations before relying on the result.}` }
+          ]
         }
       ]
     },
@@ -1587,7 +1595,7 @@ export function PrecastPanelDetailPrintReport({ inputs, results }) {
 
         {/* ---------------- 利用率汇总（Section 8） ---------------- */}
         <div className="report-section">
-          <h4>8. Utilisation Summary · 利用率汇总</h4>
+          <h4>9. Utilisation Summary · 利用率汇总</h4>
           <table className="report-table compact-table">
             <thead>
               <tr>
