@@ -274,10 +274,6 @@ function InputTab({ inputs, setInputs, previewResults }) {
                   <SelectInput label="Subsoil class" value={inputs.subsoilClass} onChange={update('subsoilClass')}
                     options={[{ value: 'A', label: 'A' }, { value: 'B', label: 'B' }, { value: 'C', label: 'C' }, { value: 'D', label: 'D' }, { value: 'E', label: 'E' }]} />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                  <SelectInput label="Importance level" value={inputs.importanceLevel} onChange={update('importanceLevel')}
-                    options={[{ value: 'IL1', label: 'IL1' }, { value: 'IL2', label: 'IL2' }, { value: 'IL3', label: 'IL3' }, { value: 'IL4', label: 'IL4' }]} />
-                </Grid>
               </>
             )}
             {section.id === 'support' && (
@@ -290,6 +286,13 @@ function InputTab({ inputs, setInputs, previewResults }) {
                 </Grid>
               </>
             )}
+            {section.id === 'boundary' && (
+              <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                <SelectInput label="Boundary element provided" value={inputs.hasBoundaryElement ? 'yes' : 'no'}
+                  onChange={value => update('hasBoundaryElement')(value === 'yes')}
+                  options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />
+              </Grid>
+            )}
             {section.id === 'connection' && (
               <>
                 <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
@@ -300,6 +303,11 @@ function InputTab({ inputs, setInputs, previewResults }) {
                   <SelectInput label="Shear key" value={inputs.shearKey ? 'yes' : 'no'}
                     onChange={value => update('shearKey')(value === 'yes')}
                     options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                  <SelectInput label="Shear plane intentionally roughened (≥2 mm)" value={inputs.shearPlaneRoughened ? 'yes' : 'no'}
+                    onChange={value => update('shearPlaneRoughened')(value === 'yes')}
+                    options={[{ value: 'no', label: 'No / not confirmed' }, { value: 'yes', label: 'Yes — specified and detailed' }]} />
                 </Grid>
               </>
             )}
@@ -339,6 +347,11 @@ function InputTab({ inputs, setInputs, previewResults }) {
               base moment calculations (UR1, UR2). <br />
               <strong>Fire support</strong> (default: Fixed–Free / Cantilever) controls the fire moment
               calculation (UR3). During fire the top support may be lost, resulting in cantilever action.
+            </Alert>
+          )}
+          {section.id === 'connection' && inputs.baseConnectionType !== 'Dowel / Grouted Connection' && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              The selected connection type is not verified by this calculation engine. Current connection ratios use the dowel / grouted model only; do not rely on them for a welded or bolted connection.
             </Alert>
           )}
           {section.id === 'connection' && (
@@ -408,12 +421,9 @@ function InputSummaryTable({ inputs }) {
     ['ψe (抗震组合系数)', tx(inputs.psiE), ''],
     ['OOP part coefficient Cp (Table 8.1)', tx(inputs.partSpectralShapeFactorT0), ''],
     ['OOP part hx / hn', `${tx(inputs.partHeightHx)} / ${tx(inputs.buildingHeightHn)}`, 'm'],
-    ['OOP Part ap (Importance)', tx(inputs.partImportanceFactor), ''],
     ['OOP Part Rp (Modification)', tx(inputs.partRiskFactor), ''],
     ['OOP Part μp (Ductility)', tx(inputs.partDuctility), ''],
     ['OOP Part Tp (Period)', tx(inputs.partPeriod), 's'],
-    ['Building Tn (Period)', tx(inputs.buildingPeriod), 's'],
-    ['Building Importance I', tx(inputs.importanceFactor), ''],
     ['Vertical bar φV@Sv (竖向筋)', `${tx(inputs.VbarDia, 0)} @ ${tx(inputs.VbarSpace, 0)}`, 'mm'],
     ['Horizontal bar φH@Sh (水平筋)', `${tx(inputs.HbarDia, 0)} @ ${tx(inputs.HbarSpace, 0)}`, 'mm'],
     ['BarLayers (纵筋层数)', tx(inputs.BarLayers, 0), 'layers'],
@@ -1682,23 +1692,17 @@ export default function PrecastPanel() {
     period: safe(inputs.period),
     spectralShapeFactor: safe(inputs.spectralShapeFactor),
     nearFaultFactor: safe(inputs.nearFaultFactor),
-    seismicWeight: safe(inputs.seismicWeight),
-    seismicDistributionFactor: safe(inputs.seismicDistributionFactor),
     psiE: safe(inputs.psiE),
     partSpectralShapeFactorT0: safe(inputs.partSpectralShapeFactorT0),
     partHeightHx: safe(inputs.partHeightHx),
     buildingHeightHn: safe(inputs.buildingHeightHn),
-    partImportanceFactor: safe(inputs.partImportanceFactor),
     partRiskFactor: safe(inputs.partRiskFactor),
     partDuctility: safe(inputs.partDuctility),
     partPeriod: safe(inputs.partPeriod),
-    buildingPeriod: safe(inputs.buildingPeriod),
-    importanceFactor: safe(inputs.importanceFactor),
     bearingWidth: safe(inputs.bearingWidth),
     bearingLength: safe(inputs.bearingLength),
     supportWindSeismic: inputs.supportWindSeismic || 'Pinned-Pinned',
     supportFire: inputs.supportFire || 'Fixed-Free',
-    effectiveLengthFactor: safe(inputs.effectiveLengthFactor, 1),
     phiFlexure: safe(inputs.phiFlexure, 0.85),
     phiShear: safe(inputs.phiShear, 0.75),
     phiCompression: safe(inputs.phiCompression, 0.85),
@@ -1708,6 +1712,7 @@ export default function PrecastPanel() {
     baseDowelEmbedment: safe(inputs.baseDowelEmbedment),
     groutStrength: safe(inputs.groutStrength),
     shearKey: inputs.shearKey === true || inputs.shearKey === 'yes',
+    shearPlaneRoughened: inputs.shearPlaneRoughened === true || inputs.shearPlaneRoughened === 'yes',
     shearKeyDepth: safe(inputs.shearKeyDepth),
     frictionCoefficient: safe(inputs.frictionCoefficient),
     phiConnection: safe(inputs.phiConnection),
