@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildDesignSummary,
+  calculateConcreteMaterialProperties,
   calculateInPlaneSectionChecks,
   calculateOutOfPlaneDesign,
   calculatePrecastPanelDesign,
@@ -87,6 +88,62 @@ test("unsupported welded connection type is not accepted by dowel checks", () =>
   assert.equal(result.connection.checks.overallPass, false);
   assert.equal(result.summary.connectionPass, false);
   assert.ok(result.connection.warnings.length > 0);
+});
+
+
+test("shared concrete material properties follow the adopted NZS 3101 equations", () => {
+  const input = { fc: 40, concreteDensity: 24, Es: 200000 };
+  const material = calculateConcreteMaterialProperties(input);
+  const rho = 24 * 1000 / 9.81;
+  const lambda = Math.min(0.4 + 0.6 * rho / 2200, 1.0);
+
+  assert.ok(Math.abs(material.rhoConcrete - rho) < 1e-9);
+  assert.ok(Math.abs(material.Ec - 4700 * Math.sqrt(40) * Math.pow(rho / 2300, 1.5)) < 1e-6);
+  assert.ok(Math.abs(material.EcSls - 4700 * Math.sqrt(50) * Math.pow(rho / 2300, 1.5)) < 1e-6);
+  assert.ok(Math.abs(material.lambdaConcrete - lambda) < 1e-9);
+  assert.ok(Math.abs(material.fr - 0.6 * lambda * Math.sqrt(40)) < 1e-9);
+});
+
+test("crack control reports separate in-plane and OOP directions without false confirmation", () => {
+  const result = calculatePrecastPanelDesign({ ...DEFAULT_INPUTS });
+  const cc = result.crackControl;
+
+  assert.ok(cc);
+  assert.ok(Number.isFinite(cc.inPlane.Mcr0));
+  assert.ok(Number.isFinite(cc.inPlane.McrAxial));
+  assert.ok(Number.isFinite(cc.outOfPlane.Mcr0));
+  assert.ok(Number.isFinite(cc.outOfPlane.McrAxial));
+  assert.ok(Number.isFinite(cc.inPlane.Icr) && cc.inPlane.Icr > 0);
+  assert.ok(Number.isFinite(cc.inPlane.Ie) && cc.inPlane.Ie > 0);
+  assert.ok(Number.isFinite(cc.outOfPlane.Icr) && cc.outOfPlane.Icr > 0);
+  assert.ok(Number.isFinite(cc.outOfPlane.Ie) && cc.outOfPlane.Ie > 0);
+  assert.equal(cc.inPlane.checks.actionConfirmed, false);
+  assert.equal(cc.outOfPlane.checks.actionConfirmed, false);
+  assert.equal(cc.checks.overallPass, false);
+  assert.ok(cc.warnings.some((warning) => warning.includes("SLS moment and SLS axial force")));
+});
+
+test("manual SLS moments and axial forces activate both crack-width calculations", () => {
+  const result = calculatePrecastPanelDesign({
+    ...DEFAULT_INPUTS,
+    crackSlsMomentInPlane: 1500,
+    crackSlsAxialInPlane: 200,
+    crackSlsMomentOutOfPlane: 100,
+    crackSlsAxialOutOfPlane: 20,
+  });
+  const ip = result.crackControl.inPlane;
+  const oop = result.crackControl.outOfPlane;
+
+  assert.equal(ip.momentInputConfirmed, true);
+  assert.equal(ip.checks.actionConfirmed, true);
+  assert.equal(ip.axialSource, "User-entered governing SLS axial force");
+  assert.equal(oop.momentInputConfirmed, true);
+  assert.equal(oop.checks.actionConfirmed, true);
+  assert.equal(oop.axialSource, "User-entered governing SLS axial force per metre");
+  assert.equal(ip.cracked, true);
+  assert.equal(oop.cracked, true);
+  assert.ok(Number.isFinite(ip.crackWidth) && ip.crackWidth >= 0);
+  assert.ok(Number.isFinite(oop.crackWidth) && oop.crackWidth >= 0);
 });
 
 test("missing connection and foundation results are not counted as PASS", () => {
