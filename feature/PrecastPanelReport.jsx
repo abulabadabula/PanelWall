@@ -152,6 +152,12 @@ export function getPrecastPanelInputRows(inputs) {
     ['Shear key', inputs.shearKey ? 'Yes' : 'No', ''],
     ['Friction coefficient μ', calcFmt(inputs.frictionCoefficient, 2), ''],
     ['ϕ connection', calcFmt(inputs.phiConnection, 2), ''],
+    ['Project crack-width limit', calcFmt(inputs.crackWidthLimit, 3), 'mm'],
+    ['Pre-cracking steel stress f_s,c', calcFmt(inputs.crackShrinkageSteelStress, 1), 'MPa'],
+    ['In-plane SLS moment override (0 = auto)', calcFmt(inputs.crackSlsMomentInPlane, 2), 'kN·m'],
+    ['OOP SLS moment override (0 = auto)', calcFmt(inputs.crackSlsMomentOutOfPlane, 2), 'kN·m/m'],
+    ['In-plane SLS axial override (blank = auto)', inputs.crackSlsAxialInPlane == null ? 'AUTO' : calcFmt(inputs.crackSlsAxialInPlane, 2), 'kN'],
+    ['OOP SLS axial override (blank = auto)', inputs.crackSlsAxialOutOfPlane == null ? 'AUTO' : calcFmt(inputs.crackSlsAxialOutOfPlane, 2), 'kN/m'],
     ['Footing B × L × t', `${calcFmt(inputs.footingWidth, 2)} × ${calcFmt(inputs.footingLength, 2)} × ${calcFmt(inputs.footingThickness, 2)}`, 'm'],
     ['Allowable bearing', calcFmt(inputs.allowableBearingPressure, 0), 'kPa']
   ];
@@ -165,6 +171,7 @@ export function getPrecastPanelSummaryRows(inputs, results) {
   const op = results.outOfPlane || {};
   const cn = results.connection || {};
   const fd = results.foundation || {};
+  const cc = results.crackControl || {};
   return [
     { param: 'In-plane V*', value: calcFmt(ip.sectionActions?.Vtotal, 2), unit: 'kN', status: null },
     { param: 'In-plane M*', value: calcFmt(ip.sectionActions?.Mtotal, 2), unit: 'kN·m', status: null },
@@ -186,7 +193,11 @@ export function getPrecastPanelSummaryRows(inputs, results) {
     { param: 'Connection uplift UR', value: calcFmt(safe(cn.ratios?.tensionRatio) * 100, 1), unit: '%', status: cn.checks?.tensionPass },
     { param: 'Connection grout bearing UR', value: calcFmt(safe(cn.ratios?.bearingRatio) * 100, 1), unit: '%', status: cn.checks?.bearingPass },
     { param: 'In-plane footing bearing UR', value: calcFmt(safe(fd.bearingRatio) * 100, 1), unit: '%', status: fd.checks?.bearingPass },
-    { param: 'In-plane footing sliding UR', value: calcFmt(safe(fd.slidingRatio) * 100, 1), unit: '%', status: fd.checks?.slidingPass }
+    { param: 'In-plane footing sliding UR', value: calcFmt(safe(fd.slidingRatio) * 100, 1), unit: '%', status: fd.checks?.slidingPass },
+    { param: 'SLS crack width — in-plane', value: calcFmt(cc.inPlane?.crackWidth, 3), unit: 'mm', status: cc.inPlane?.checks?.pass },
+    { param: 'SLS crack-width UR — in-plane', value: calcFmt(cc.inPlane?.crackWidthUtilisation, 3), unit: 'UR', status: cc.inPlane?.checks?.pass },
+    { param: 'SLS crack width — OOP', value: calcFmt(cc.outOfPlane?.crackWidth, 3), unit: 'mm', status: cc.outOfPlane?.checks?.pass },
+    { param: 'SLS crack-width UR — OOP', value: calcFmt(cc.outOfPlane?.crackWidthUtilisation, 3), unit: 'UR', status: cc.outOfPlane?.checks?.pass }
   ];
 }
 
