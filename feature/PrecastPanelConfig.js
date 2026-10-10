@@ -153,12 +153,9 @@ export const INPUT_SECTIONS = [
       { key: 'partSpectralShapeFactorT0', label: 'OOP Part Response Coefficient Cp', unit: '', step: '0.05', min: '0' },
       { key: 'partHeightHx', label: 'OOP Part Height hx (above base)', unit: 'm', step: '0.1', min: '0' },
       { key: 'buildingHeightHn', label: 'Building Height hn', unit: 'm', step: '0.1', min: '0.1' },
-      { key: 'partImportanceFactor', label: 'Part Importance Factor (ap)', unit: '', step: '0.1', min: '0' },
       { key: 'partRiskFactor', label: 'Part Risk Factor (Rp)', unit: '', step: '0.1', min: '0.9' },
       { key: 'partDuctility', label: 'Part Ductility Factor (μp)', unit: '', step: '0.1', min: '1' },
       { key: 'partPeriod', label: 'Part Fundamental Period (Tp)', unit: 's', step: '0.01', min: '0.01' },
-      { key: 'buildingPeriod', label: 'Building Fundamental Period (Tn)', unit: 's', step: '0.01', min: '0.01' },
-      { key: 'importanceFactor', label: 'Building Importance Factor (I)', unit: '', step: '0.1', min: '1' }
     ]
   },
   {
@@ -199,7 +196,6 @@ export const INPUT_SECTIONS = [
     id: 'support',
     title: '13. OOP Support Conditions & Design Factors',
     fields: [
-      { key: 'effectiveLengthFactor', label: 'Effective Length Factor K', unit: '', step: '0.05', min: '0.1' },
       { key: 'phiFlexure', label: 'ϕ Flexure', unit: '', step: '0.01', min: '0' },
       { key: 'phiShear', label: 'ϕ Shear', unit: '', step: '0.01', min: '0' },
       { key: 'phiCompression', label: 'ϕ Compression', unit: '', step: '0.01', min: '0' }
@@ -337,7 +333,6 @@ export const DEFAULT_INPUTS = {
   旧的 OOP 系数输入 CdT1 / CdTE 已在 v0.6 移除。
   ------------------------------------------------------------------------ */
   subsoilClass: 'C',
-  importanceLevel: 'IL2',
   hazardFactor: 0.13,
   returnPeriodFactor: 1.0,
   ductility: 1.25,
@@ -352,12 +347,9 @@ export const DEFAULT_INPUTS = {
   partSpectralShapeFactorT0: 1.33,
   partHeightHx: 2.0,
   buildingHeightHn: 4.0,
-  partImportanceFactor: 1.0,
   partRiskFactor: 1.0,
   partDuctility: 1.0,
   partPeriod: 0.1,
-  buildingPeriod: 0.4,
-  importanceFactor: 1.0,
 
   /* --------------------------------------------------------------------------
   9. UNIFIED Reinforcement
@@ -399,7 +391,6 @@ export const DEFAULT_INPUTS = {
   supportWindSeismic: 'Pinned-Pinned',
   outOfPlaneSupportCondition: 'Pinned-Pinned',
   supportFire: 'Fixed-Free',
-  effectiveLengthFactor: 1.0,
   phiFlexure: 0.80,
   phiShear: 0.75,
   phiCompression: 0.75,
@@ -421,6 +412,7 @@ export const DEFAULT_INPUTS = {
   baseDowelEmbedment: 300,
   groutStrength: 40,
   shearKey: false,
+  shearPlaneRoughened: false,
   shearKeyDepth: 50,
 
   /* --------------------------------------------------------------------------
