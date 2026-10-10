@@ -477,7 +477,6 @@ export function calculateBoundaryElementNM(input = {}, ctx = {}) {
     const r = Ag_m2 > 0 ? Math.min(Ab_m2 / Ag_m2, 1) : 0;
     const Gb = r * (finite(ctx.Gwall) + finite(ctx.GlineTotal));
     const Qb = r * finite(ctx.QlineTotal);
-    console.log("ctx:",ctx)
     const demandCases = [{
         key: 'D0',
         label: '1.35G (permanent)',
@@ -699,7 +698,6 @@ export function calculateInPlaneDesign(input = {}) {
     /* ------------------------------------------------------------------------
     Boundary element N-M.
     ----------------------------------------------------------------------- */
-    console.log("Gwall:", Gwall, "GlineTotal:",GlineTotal,"QlineTotal:",QlineTotal,"Ngravity:",Ngravity,"seismicGravity:",seismicGravity,"lintelReaction:",lintelReaction,"lintelEcc:",lintelEccFromFace)
     const boundaryNM = calculateBoundaryElementNM(input, {
         Gwall,
         GlineTotal,
@@ -710,7 +708,6 @@ export function calculateInPlaneDesign(input = {}) {
         lintelReaction,
         lintelEcc: lintelEccFromFace
     });
-    console.log("boundaryNM:",boundaryNM)
     const phiPn = boundaryNM.available ? boundaryNM.keyPoints.phiP0 : 0;
     const phiMn = boundaryNM.available ? boundaryNM.keyPoints.phiM0 : 0;
     const axialRatio = phiPn > 0 ? NseismicCompression / phiPn : boundaryNM.available ? Infinity : 0;
@@ -1065,7 +1062,6 @@ export function calculateOutOfPlaneDesign(input = {}) {
     /* 配筋率：ρ = As[mm²/m] / (1000 × t_mm)，无量纲 */
     const rhoV = tw > 0 ? AWV / (tw * 1e6) : 0;
     const rhoH = tw > 0 ? AWH / (tw * 1e6) : 0;
-    console.log("rhoV:",rhoV, "rhoH:",rhoH)
     /* ------------------------------------------------------------------------
     Gravity actions per metre of wall（单位已修正：tf/ts/ds 为 mm）。
     P-Δ 轴力 = 外部轴力 + 中点以上墙重（BRANZ 指南 §4.6）；
@@ -1187,7 +1183,6 @@ export function calculateOutOfPlaneDesign(input = {}) {
         Math.sqrt(15 / lambda_euler) :
         Infinity;
     const cond3_euler = kHt_ratio <= kHt_eulerCapacity;
-    console.log("lamb:",lambda_euler, "kht:", kHt_eulerCapacity, "cond3:", cond3_euler)
 
     /* (4) Vlasov/Timoshenko 弯扭屈曲（指南式 B4/B5）：
        Mcrit = 0.6·(900fc)·t³·L/(kH)；Mdemand = 0.5(P+0.5W+Ast·fy)·L */
