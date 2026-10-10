@@ -1036,7 +1036,7 @@ export function getPrecastPanelDetailSections(inputs, results) {
           formulas: [
             { caption: 'Action confirmation / 作用确认', tex: `\\text{In-plane action confirmed: ${crackIP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'}; OOP action confirmed: ${crackOOP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'}}` },
             { caption: 'Effective inertia and scope / 有效惯性矩及适用性', tex: `\\text{NZS 3101 Cl. 6.8.3 Eq. 6-2 is a beam/slab interpolation; the axial-load adaptation for wall panels is a screening estimate.}` },
-            { caption: 'Acceptance assumptions / 验收假定', tex: `\\text{Confirm project crack-width limit, pre-cracking shrinkage stress and governing SLS load combinations before relying on the result.}` }
+            { caption: 'Acceptance assumptions / 验收假定', tex: `\\text{Cl. 2.4.4.1: prescribed crack-control SLS combinations exclude wind/seismic. Confirm the project limit and f_{s,c}; lateral-action crack checks are supplemental.}` }
           ]
         }
       ]
