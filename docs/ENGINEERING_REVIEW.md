@@ -41,7 +41,7 @@ This review is scoped to the source currently in this repository. It is not a cl
 2. The application’s currently calculated action totals are not yet a demonstrated substitute for a complete sign-aware load-combination envelope. An overall result based on a single positive N, M and V can miss reversed or differently combined governing cases.
 3. The current Mservice approximation is not a proper SLS load-combination derivation. No crack-width result should be inferred from it.
 4. Foundation and dowel checks in this code are screening calculations. They do not capture all relevant concrete and geotechnical failure modes.
-5. The calculation engine contains several historically revised formula blocks and comments that refer to specific NZS 3101 editions/clauses. Confirm every reference against the licensed standard and its applicable amendments; do not assume the comment proves the implementation is compliant.
+5. The calculation engine contains formula blocks based on NZS 1170.5:2004 and historically revised NZS 3101 clauses. Confirm every reference against the licensed standard and its applicable amendments; do not assume the comment proves the implementation is compliant.
 6. The interface intentionally does not show an overall DESIGN PASS while these verification items remain incomplete. A passing individual utilisation ratio is not an engineering sign-off.
 
 ## Reference basis to verify
