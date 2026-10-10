@@ -2760,7 +2760,9 @@ export function buildDesignSummary(
     };
 }
 
-/* ============================================================================ 
+/* ============================================================================
+MAIN PUBLIC API
+=========================================================================== */
 export function calculatePrecastPanelDesign(rawInput = {}) {
     const input = { ...rawInput };
     const materials = {
