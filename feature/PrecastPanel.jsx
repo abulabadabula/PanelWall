@@ -322,7 +322,7 @@ function InputTab({ inputs, setInputs, previewResults }) {
             <Alert severity="warning" sx={{ mt: 2 }}>
               The default 0.30 mm width is a project starting assumption, not a universal NZS 3101 limit.
               A zero SLS-moment override uses a screening estimate from existing wind/lintel inputs, not a full SLS load-combination envelope.
-              Enter the governing SLS moment and axial force for each direction to confirm a crack check. Leave SLS axial force blank only for screening. Set f_s,c to zero only where the NZS 3101 shrinkage condition is justified; otherwise estimate the pre-cracking steel stress.
+              Enter the governing SLS moment and axial force for each direction to confirm the crack-width calculation. For NZS 3101 Cl. 2.4.4.1, use the required serviceability combinations excluding wind/seismic; any wind/seismic-driven crack check is supplemental and must be identified as such. Leave axial force blank only for screening. Set f_s,c to zero only where the NZS 3101 shrinkage condition is justified; otherwise estimate the pre-cracking steel stress.
             </Alert>
           )}
           {section.id === 'gravity' && (
@@ -1411,9 +1411,7 @@ function CrackControlBlock({ inputs, materials, crackControl }) {
             {result.normalizedAxialLoadRatio > 0.015
               ? ' Normalized axial load exceeds 0.015; independently verify BRANZ low-axial-load scope and the cracked-section model.'
               : ''}
-            {result.normalizedAxialLoadRatio > result.normalizedAxialLoadLimit
-              ? ' This simplified crack/stiffness method is outside its stated screening scope; use a rational analysis.'
-              : ''}
+            ' Effective inertia I_e from Cl. 6.8.3 is based on a beam/slab empirical model for members without significant axial load; its use for a wall panel is screening only and must be independently justified.'
           </Typography>
         </Alert>
       </CalculationSubsection>
