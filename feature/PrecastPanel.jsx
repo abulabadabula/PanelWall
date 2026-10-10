@@ -1400,9 +1400,31 @@ function CalculationTab({ inputs, results }) {
     <Box>
       <Alert severity={ResultSummary.overallPass ? 'success' : 'warning'} sx={{ mb: 2, fontWeight: 700 }}>
         {ResultSummary.overallPass
-          ? '✓ All implemented checks pass under current inputs.'
-          : '✗ Some checks did not pass. Review sections below.'}
+          ? '✓ All required verification checks are complete and pass under current inputs.'
+          : 'PRELIMINARY — NOT A CODE-COMPLIANCE SIGN-OFF. Individual checks may pass while the overall design remains incomplete or requires engineering review.'}
       </Alert>
+      {!ResultSummary.designComplete && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <Typography sx={{ fontWeight: 800, mb: 1 }}>
+            Items not yet fully verified
+          </Typography>
+          {(ResultSummary.reviewItems || []).map((item, index) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5 }}>
+              {index + 1}. {item}
+            </Typography>
+          ))}
+          {(ResultSummary.validation?.errors || []).map((item) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5 }}>
+              Input issue: {item}
+            </Typography>
+          ))}
+          {(ResultSummary.validation?.warnings || []).map((item) => (
+            <Typography component="div" variant="body2" key={item} sx={{ mb: 0.5 }}>
+              Scope warning: {item}
+            </Typography>
+          ))}
+        </Alert>
+      )}
       <CalculationSection number="0" title="Input Data Used · 输入参数汇总" chip={<Chip size="small" label="Live inputs" />}>
         <InputSummaryTable inputs={inputs} />
       </CalculationSection>
@@ -1709,10 +1731,18 @@ export default function PrecastPanel() {
     setActiveTab(0);
   };
 
-  const statusLabel = results.calculationError ? 'CALCULATION ERROR'
-    : results.summary?.overallPass ? 'DESIGN PASS' : 'CHECK REQUIRED';
-  const statusColor = results.calculationError ? 'error'
-    : results.summary?.overallPass ? 'success' : 'warning';
+  const statusLabel = results.calculationError
+    ? 'CALCULATION ERROR'
+    : results.summary?.overallPass
+      ? 'DESIGN PASS'
+      : results.summary?.designComplete === false
+        ? 'PRELIMINARY / REVIEW REQUIRED'
+        : 'CHECK REQUIRED';
+  const statusColor = results.calculationError
+    ? 'error'
+    : results.summary?.overallPass
+      ? 'success'
+      : 'warning';
 
   return (
     <Box sx={{ width: '100%', minHeight: '100%', bgcolor: '#f5f7fa', py: 2 }}>
