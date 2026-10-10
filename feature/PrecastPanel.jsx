@@ -318,6 +318,13 @@ function InputTab({ inputs, setInputs, previewResults }) {
               Engine will use clamped value {fmt(hroofCheck.hroofEffective, 2)} m.
             </Alert>
           )}
+          {section.id === 'crackControl' && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              The default 0.30 mm width is a project starting assumption, not a universal NZS 3101 limit.
+              A zero SLS-moment override uses a screening estimate from existing wind/lintel inputs, not a full SLS load-combination envelope.
+              Enter the governing serviceability moment for each direction to confirm the checks. Set f_s,c to zero only where the NZS 3101 shrinkage condition is justified; otherwise estimate the pre-cracking steel stress.
+            </Alert>
+          )}
           {section.id === 'gravity' && (
             <Alert severity="info" sx={{ mt: 2 }}>
               Line load = Pressure × Tributary Range (Sr). Roof wind pressure (wwd) is included here.
@@ -1726,7 +1733,11 @@ export default function PrecastPanel() {
     footingWidth: safe(inputs.footingWidth),
     footingLength: safe(inputs.footingLength),
     footingThickness: safe(inputs.footingThickness),
-    allowableBearingPressure: safe(inputs.allowableBearingPressure, 150)
+    allowableBearingPressure: safe(inputs.allowableBearingPressure, 150),
+    crackWidthLimit: safe(inputs.crackWidthLimit, 0.30),
+    crackShrinkageSteelStress: safe(inputs.crackShrinkageSteelStress, 0),
+    crackSlsMomentInPlane: safe(inputs.crackSlsMomentInPlane, 0),
+    crackSlsMomentOutOfPlane: safe(inputs.crackSlsMomentOutOfPlane, 0)
   }), [inputs]);
 
   const results = useMemo(() => {
