@@ -48,7 +48,7 @@ This review is scoped to the source currently in this repository. It is not a cl
 
 - G. J. Beattie, BRANZ, *Design Guide: Slender Precast Concrete Panels with Low Axial Load* (2007), including its scope/limitations, panel actions, stability, connections and appendices.
 - NZS 3101.1&2:2006, including amendments applicable to the project.
-- AS/NZS 1170.0 (combinations and general principles), AS/NZS 1170.1 (permanent and imposed actions), AS/NZS 1170.2 (wind actions), and AS/NZS 1170.5 (earthquake actions).
+- AS/NZS 1170.0 (combinations and general principles), AS/NZS 1170.1 (permanent and imposed actions), AS/NZS 1170.2 (wind actions), and NZS 1170.5 (earthquake actions).
 - MBIE B1/VM1, Second Edition, effective 28 July 2025. As of 10 October 2026, the published transition period for the previous B1 verification-method edition ended on 31 July 2026; confirm the consent-specific compliance pathway and references before use. See https://www.building.govt.nz/building-code-compliance/b-stability/b1-structure/b1-acceptable-solutions-and-verification-methods.
 
 Do not distribute a calculation report as a verified design until a suitably qualified New Zealand structural engineer has reviewed the assumptions, code versions, calculations, detailing and foundation/connection design.
