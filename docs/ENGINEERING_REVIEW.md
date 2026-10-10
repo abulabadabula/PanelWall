@@ -11,6 +11,9 @@ This review is scoped to the source currently in this repository. It is not a cl
 - The member N–M check is included in the in-plane checks feeding the overall summary.
 - Missing connection or foundation results fail closed instead of being treated as successful.
 - Basic input validation and a BRANZ low-axial-load scope warning have been added.
+- The OOP part period and ductility fields now feed the seismic action calculation; non-tabulated ductility values use a conservative response-factor step and trigger a scope warning.
+- The connection input now exposes whether the shear plane is intentionally roughened, and welded/bolted choices are explicitly reported as unsupported by the current dowel/grout calculation. Boundary-element presence is editable rather than fixed to its default.
+- Ignored OOP inputs (part/building importance and building period) and an unused effective-length override were removed from the input screen to avoid suggesting that they affected results. The building response/return-period assumptions still require project-specific selection.
 - The overall status is deliberately **PRELIMINARY — ENGINEERING REVIEW REQUIRED** until the critical verification gaps below are addressed and validated.
 - A minimal Vite project manifest/HTML entry and regression tests have been added.
 
