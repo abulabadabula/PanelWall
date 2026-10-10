@@ -1024,6 +1024,7 @@ export function getPrecastPanelUtilisationRows(results) {
   const op = results.outOfPlane || {};
   const cn = results.connection || {};
   const fd = results.foundation || {};
+  const cc = results.crackControl || {};
   return [
     ["In-plane: Compression stress σmax ≤ 0.6f'c", null, ip.checks?.stressCompressionPass],
     ['In-plane: Lintel bearing', ip.bearing?.bearingRatio, ip.checks?.bearingPass],
@@ -1043,6 +1044,10 @@ export function getPrecastPanelUtilisationRows(results) {
     ['Connection: Grout bearing', cn.ratios?.bearingRatio, cn.checks?.bearingPass],
     ['In-plane footing: Bearing', fd.bearingRatio, fd.checks?.bearingPass],
     ['In-plane footing: Sliding', fd.slidingRatio, fd.checks?.slidingPass],
+    ['SLS crack width: in-plane', cc.inPlane?.crackWidth, cc.inPlane?.checks?.pass],
+    ['SLS crack-width UR: in-plane', cc.inPlane?.crackWidthUtilisation, cc.inPlane?.checks?.pass],
+    ['SLS crack width: out-of-plane', cc.outOfPlane?.crackWidth, cc.outOfPlane?.checks?.pass],
+    ['SLS crack-width UR: out-of-plane', cc.outOfPlane?.crackWidthUtilisation, cc.outOfPlane?.checks?.pass],
     ['OOP slenderness h/t (warning item)', null, !(ip.checks?.slendernessWarning)]
   ];
 }
