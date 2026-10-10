@@ -322,7 +322,7 @@ function InputTab({ inputs, setInputs, previewResults }) {
             <Alert severity="warning" sx={{ mt: 2 }}>
               The default 0.30 mm width is a project starting assumption, not a universal NZS 3101 limit.
               A zero SLS-moment override uses a screening estimate from existing wind/lintel inputs, not a full SLS load-combination envelope.
-              Enter the governing serviceability moment for each direction to confirm the checks. Set f_s,c to zero only where the NZS 3101 shrinkage condition is justified; otherwise estimate the pre-cracking steel stress.
+              Enter the governing SLS moment and axial force for each direction to confirm a crack check. Leave SLS axial force blank only for screening. Set f_s,c to zero only where the NZS 3101 shrinkage condition is justified; otherwise estimate the pre-cracking steel stress.
             </Alert>
           )}
           {section.id === 'gravity' && (
@@ -1385,13 +1385,20 @@ function CrackControlBlock({ inputs, materials, crackControl }) {
           highlight
         />
         <CalculationFormula
-          caption="SLS action used / 本次采用的服务弯矩"
-          formula={"M_{SLS}=" + tx(result.serviceMoment, 2) + momentUnit}
+          caption="SLS actions used / 本次采用的服务作用"
+          formula={"N_{SLS}=" + tx(result.axialForce, 2) + (directionLabel.includes('Out-of-plane') ? "\\,\\mathrm{kN/m}" : "\\,\\mathrm{kN}") + ",\\quad M_{SLS}=" + tx(result.serviceMoment, 2) + momentUnit}
+        />
+        <CalculationFormula
+          caption="Cracking moment source / 开裂弯矩计算依据"
+          formula={"\\sigma_N=" + tx(result.sigmaN, 3) + "\\,\\mathrm{MPa},\\quad f_r=" + tx(result.fr, 3) + "\\,\\mathrm{MPa}"}
         />
         <Alert severity={result.checks?.actionConfirmed ? (result.checks?.numericalPass ? 'success' : 'error') : 'warning'} sx={{ mt: 1 }}>
           <Typography variant="body2" sx={{ fontWeight: 700 }}>Status: {result.checks?.status || 'NOT VERIFIED'}</Typography>
           <Typography variant="body2">
-            SLS moment source: {result.momentSource}. {result.direction || 'Governing bending sense'}.
+            SLS moment source: {result.momentSource}. SLS axial-force source: {result.axialSource}. {result.direction || 'Governing bending sense'}.
+            {result.serviceSteelStressOK === false
+              ? ' Calculated service tensile reinforcement stress exceeds fy; check the action units and section model.'
+              : ''}
             {result.normalizedAxialLoadRatio > 0.015
               ? ' Normalized axial load exceeds 0.015; independently verify BRANZ low-axial-load scope and the cracked-section model.'
               : ''}
@@ -1634,11 +1641,15 @@ function ResultsTab({ inputs, results }) {
         <ResultRow label="Project crack width limit" value={fmt(crackControl.limit, 3)} unit="mm" />
         <ResultRow label="In-plane Mcr (no axial adjustment)" value={fmt(crackIP.Mcr0, 2)} unit="kN·m" />
         <ResultRow label="In-plane Mcr,N" value={fmt(crackIP.McrAxial, 2)} unit="kN·m" />
+        <ResultRow label="In-plane SLS N / M" value={fmt(crackIP.axialForce, 2) + " / " + fmt(crackIP.serviceMoment, 2)} unit="kN / kN·m" />
+        <ResultRow label="In-plane SLS actions confirmed" value={crackIP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'} pass={crackIP.checks?.actionConfirmed} />
         <ResultRow label="In-plane Icr / Ie" value={fmt(crackIP.Icr, 0) + " / " + fmt(crackIP.Ie, 0)} unit="mm⁴" />
         <ResultRow label="In-plane surface crack width" value={fmt(crackIP.crackWidth, 3)} unit="mm" pass={crackIP.checks?.pass} highlight />
         <ResultRow label="In-plane crack utilisation" value={fmt(crackIP.crackWidthUtilisation, 3)} unit="UR" pass={crackIP.checks?.pass} />
         <ResultRow label="OOP Mcr (no axial adjustment)" value={fmt(crackOOP.Mcr0, 2)} unit="kN·m/m" />
         <ResultRow label="OOP Mcr,N" value={fmt(crackOOP.McrAxial, 2)} unit="kN·m/m" />
+        <ResultRow label="OOP SLS N / M" value={fmt(crackOOP.axialForce, 2) + " / " + fmt(crackOOP.serviceMoment, 2)} unit="kN/m / kN·m/m" />
+        <ResultRow label="OOP SLS actions confirmed" value={crackOOP.checks?.actionConfirmed ? 'YES' : 'NO — SCREENING'} pass={crackOOP.checks?.actionConfirmed} />
         <ResultRow label="OOP Icr / Ie" value={fmt(crackOOP.Icr, 0) + " / " + fmt(crackOOP.Ie, 0)} unit="mm⁴ (1 m strip)" />
         <ResultRow label="OOP surface crack width" value={fmt(crackOOP.crackWidth, 3)} unit="mm" pass={crackOOP.checks?.pass} highlight />
         <ResultRow label="OOP crack utilisation" value={fmt(crackOOP.crackWidthUtilisation, 3)} unit="UR" pass={crackOOP.checks?.pass} />
