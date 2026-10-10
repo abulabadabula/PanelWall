@@ -1083,14 +1083,14 @@ export function calculateOutOfPlaneDesign(input = {}) {
     const N_stab = NFF + NSF + NHF;                                /* 稳定重量（kN/m） */
     const Nmax = Math.max(1.35 * N_GE, 1.2 * N_GE + 1.5 * Wq_line);
     /* =======================================================================
-    Part/component seismic action. AS/NZS 1170.5:2004 Clause 8.3.2 平面外地震力计算
+    Part/component seismic action. NZS 1170.5:2004 Clause 8.3.2 平面外地震力计算
     ======================================================================= */
     const partDuctility = positive(input.partDuctilityFactorMu, positive(input.partDuctility, 1));
     const partCh0 = positive(input.partSpectralShapeFactorT0, 1.33);
     const partC0 = partCh0 * positive(input.hazardFactor, 1) * positive(input.returnPeriodFactor, 1) * positive(input.nearFaultFactor, 1);
     const partRp = positive(input.partRiskFactor, 1);
 
-    /* 高度放大系数 Chi（AS/NZS 1170.5:2004 §8.4.2.2，Eq 8.3(1)~(3)） */
+    /* 高度放大系数 Chi（NZS 1170.5:2004 §8.4.2.2，Eq 8.3(1)~(3)） */
     const partHx = positive(input.partHeightHx);
     const partHn = positive(input.buildingHeightHn);
     const CHi = (() => {
@@ -1127,7 +1127,7 @@ export function calculateOutOfPlaneDesign(input = {}) {
     const partPeriod = partPeriodInput > 0 ? partPeriodInput : partPeriodEstimate;
     const partPeriodSource = partPeriodInput > 0 ? 'user input' : 'simplified stiffness estimate';
 
-    /* 部件谱形系数（AS/NZS 1170.5 Eq 8.4(1)~(3)，拐点 0.75 s） */
+    /* 部件谱形系数（NZS 1170.5 Eq 8.4(1)~(3)，拐点 0.75 s） */
     const partCiTp = (() => {
         if (partPeriod <= 0.75) return 2.0;
         if (partPeriod < 1.5) return 2 * (1.75 - partPeriod);
