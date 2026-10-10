@@ -566,6 +566,10 @@ export function getPrecastPanelDetailSections(inputs, results) {
   const op = results.outOfPlane || {};
   const cn = results.connection || {};
   const fd = results.foundation || {};
+  const crackControl = results.crackControl || {};
+  const crackMaterial = crackControl.materials || {};
+  const crackIP = crackControl.inPlane || {};
+  const crackOOP = crackControl.outOfPlane || {};
 
   const geo = ip.geometry || {};
   const g = ip.gravity || {};
@@ -971,7 +975,42 @@ export function getPrecastPanelDetailSections(inputs, results) {
           ]
         }
       ]
-    }
+    },
+    {
+      title: '8. SLS Crack Control · 裂缝验算',
+      steps: [
+        {
+          sub: '8.1 Shared concrete material properties / 统一混凝土材料属性',
+          formulas: [
+            { caption: 'Density and density factor / 密度及密度系数', tex: `\\rho=${tx(crackMaterial.rhoConcrete, 0)}\\,\\mathrm{kg/m^3},\\quad \\lambda=${tx(crackMaterial.lambdaConcrete, 3)}` },
+            { caption: 'Concrete moduli and modulus of rupture / 混凝土弹性模量与抗折强度', tex: `E_c=4700\\sqrt{f'_c}(\\rho/2300)^{1.5}=${tx(crackMaterial.Ec, 0)}\\,\\mathrm{MPa},\\quad E_{c,SLS}=${tx(crackMaterial.EcSls, 0)}\\,\\mathrm{MPa}` },
+            { caption: 'Modulus of rupture / 抗折强度', tex: `f_r=0.6\\lambda\\sqrt{f'_c}=${tx(crackMaterial.fr, 3)}\\,\\mathrm{MPa},\\quad w_{lim}=${tx(crackControl.limit, 3)}\\,\\mathrm{mm}` }
+          ]
+        },
+        {
+          sub: '8.2 In-plane flexural crack control / 平面内裂缝验算',
+          formulas: [
+            { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackIP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackIP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m}` },
+            { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `n=E_s/E_{c,SLS}=${tx(crackMaterial.Es / Math.max(crackMaterial.EcSls, 1), 3)},\\quad I_{cr}=I_{tr,0}-S_{tr}^2/A_{tr}=${tx(crackIP.Icr, 0)}\\,\\mathrm{mm^4}` },
+            { caption: 'Effective inertia / 有效惯性矩 (NZS 3101 Cl. 6.8.3 Eq. 6-2)', tex: `I_e=(M_{cr,N}/M_a)^3I_g+[1-(M_{cr,N}/M_a)^3]I_{cr}=${tx(crackIP.Ie, 0)}\\,\\mathrm{mm^4}` },
+            { caption: 'Crack-width parameters / 裂缝宽度参数', tex: `f_{s,ch}=\\max(f_s-0.5f_{s,c},0)=${tx(crackIP.fsChange, 1)}\\,\\mathrm{MPa},\\quad \\beta'=${tx(crackIP.betaPrime, 3)},\\quad g_s=${tx(crackIP.gs, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Crack width / 裂缝宽度 (NZS 3101 Cl. 2.4.4.6 Eqs. 2-7 to 2-9)', tex: `w=2.0\\beta'f_{s,ch}g_s/E_s=${tx(crackIP.crackWidth, 3)}\\,\\mathrm{mm},\\quad UR_w=${txUR(crackIP.crackWidthUtilisation)}\\;\\Rightarrow\\;\\text{${crackIP.checks?.status || 'NOT VERIFIED'}}` },
+            { caption: 'SLS actions / SLS 作用', tex: `N_{SLS}=${tx(crackIP.axialForce, 2)}\\,\\mathrm{kN},\\quad M_{SLS}=${tx(crackIP.serviceMoment, 2)}\\,\\mathrm{kN\\cdot m}` }
+          ]
+        },
+        {
+          sub: '8.3 Out-of-plane flexural crack control / 平面外裂缝验算',
+          formulas: [
+            { caption: 'Gross and axial-adjusted cracking moments / 毛截面及轴力修正开裂弯矩', tex: `M_{cr,0}=f_rI_g/y_t=${tx(crackOOP.Mcr0, 2)}\\,\\mathrm{kN\\cdot m/m},\\quad M_{cr,N}=(f_r+N_{SLS}/A_g)I_g/y_t=${tx(crackOOP.McrAxial, 2)}\\,\\mathrm{kN\\cdot m/m}` },
+            { caption: 'Transformed cracked inertia / 换算开裂惯性矩', tex: `n=E_s/E_{c,SLS}=${tx(crackMaterial.Es / Math.max(crackMaterial.EcSls, 1), 3)},\\quad I_{cr}=${tx(crackOOP.Icr, 0)}\\,\\mathrm{mm^4/m}` },
+            { caption: 'Effective inertia / 有效惯性矩 (screening adaptation of NZS 3101 Cl. 6.8.3)', tex: `I_e=(M_{cr,N}/M_a)^3I_g+[1-(M_{cr,N}/M_a)^3]I_{cr}=${tx(crackOOP.Ie, 0)}\\,\\mathrm{mm^4/m}` },
+            { caption: 'Crack-width parameters / 裂缝宽度参数', tex: `f_{s,ch}=${tx(crackOOP.fsChange, 1)}\\,\\mathrm{MPa},\\quad \\beta'=${tx(crackOOP.betaPrime, 3)},\\quad g_s=${tx(crackOOP.gs, 1)}\\,\\mathrm{mm}` },
+            { caption: 'Crack width / 裂缝宽度 (NZS 3101 Cl. 2.4.4.6 Eqs. 2-7 to 2-9)', tex: `w=2.0\\beta'f_{s,ch}g_s/E_s=${tx(crackOOP.crackWidth, 3)}\\,\\mathrm{mm},\\quad UR_w=${txUR(crackOOP.crackWidthUtilisation)}\\;\\Rightarrow\\;\\text{${crackOOP.checks?.status || 'NOT VERIFIED'}}` },
+            { caption: 'SLS actions / SLS 作用', tex: `N_{SLS}=${tx(crackOOP.axialForce, 2)}\\,\\mathrm{kN/m},\\quad M_{SLS}=${tx(crackOOP.serviceMoment, 2)}\\,\\mathrm{kN\\cdot m/m}` }
+          ]
+        }
+      ]
+    },
   ];
 }
 
