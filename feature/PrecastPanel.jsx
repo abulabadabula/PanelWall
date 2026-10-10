@@ -1419,7 +1419,7 @@ function CrackControlBlock({ inputs, materials, crackControl }) {
   };
 
   return (
-    <CalculationSection number="12" title="SLS Crack Control · 平面内外裂缝验算" chip={<Chip size="small" label="NZS 3101 Cl. 2.4.4.6 / 6.8.3" />}>
+    <CalculationSection number="12" title="SLS Crack Control · 平面内外裂缝验算" chip={<Chip size="small" label="NZS 3101 Cl. 2.4.4.1 / 2.4.4.6 / 6.8.3" />}>
       <Alert severity="info" sx={{ mb: 2 }}>
         <Typography variant="body2">
           Flexural surface crack width is estimated separately for in-plane and out-of-plane bending.
